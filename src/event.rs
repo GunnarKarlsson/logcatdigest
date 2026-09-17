@@ -1,4 +1,4 @@
-//! Fold time-ordered lines into single-line or multi-line fatal/ANR events.
+//! Group time-ordered lines into single-line or multi-line fatal/ANR events.
 //!
 //! Uses line index (not `Instant`) so offline files and bugreports work.
 
@@ -6,14 +6,15 @@ use crate::fingerprint::redact;
 use crate::parse::LogLine;
 use crate::severity::is_high_severity;
 
-const MAX_FOLD_LINES: usize = 32;
+const MAX_GROUP_LINES: usize = 32;
 
-/// One log line input to the reducer.
+/// One log line plus a stable order index — input to
+/// [`GroupedEventList::group_from_indexed_log_lines`].
 #[derive(Debug, Clone)]
-pub struct InsightLine {
+pub struct IndexedLogLine {
     /// Stable order index from the source line list (not wall-clock time).
     pub index: usize,
-    /// Process id used when folding multi-line stacks.
+    /// Process id used when grouping multi-line stacks.
     pub pid: u32,
     /// Priority letter: `V`, `D`, `I`, `W`, `E`, or `F`.
     pub level: char,
@@ -23,7 +24,7 @@ pub struct InsightLine {
     pub message: String,
 }
 
-impl From<(usize, &LogLine)> for InsightLine {
+impl From<(usize, &LogLine)> for IndexedLogLine {
     fn from((index, line): (usize, &LogLine)) -> Self {
         Self {
             index,
@@ -35,9 +36,9 @@ impl From<(usize, &LogLine)> for InsightLine {
     }
 }
 
-/// One insight incident: a single error line, or a folded fatal/ANR stack.
+/// One error: a single log line, or a multi-line fatal/ANR stack grouped by PID.
 #[derive(Debug, Clone)]
-pub struct InsightEvent {
+pub struct GroupedEvent {
     /// Index of the first line that formed this event.
     pub index: usize,
     /// Process id of the event.
@@ -52,10 +53,90 @@ pub struct InsightEvent {
     pub samples: Vec<String>,
 }
 
-impl InsightEvent {
+impl GroupedEvent {
     /// Returns true when this event's headline is high severity.
     pub fn is_high_severity(&self) -> bool {
         is_high_severity(self.level, &self.tag, &self.headline)
+    }
+}
+
+/// Ordered list of [`GroupedEvent`]s produced by grouping indexed log lines.
+#[derive(Debug, Clone, Default)]
+pub struct GroupedEventList(Vec<GroupedEvent>);
+
+impl GroupedEventList {
+    /// Group time-ordered indexed lines into events. Every line is consumed.
+    pub fn group_from_indexed_log_lines(lines: &[IndexedLogLine]) -> Self {
+        let mut events = Vec::new();
+        let mut builder: Option<LineStackBuilder> = None;
+
+        for line in lines {
+            if let Some(stack) = builder.as_mut() {
+                if is_stack_continuation(stack, line) {
+                    stack.lines.push(line.clone());
+                    continue;
+                }
+                events.push(builder.take().expect("stack builder present").into_event());
+            }
+
+            if is_stack_head_message(line.level, &line.message) {
+                builder = Some(LineStackBuilder::start(line.clone()));
+            } else {
+                events.push(GroupedEvent::from_line(line.clone()));
+            }
+        }
+
+        if let Some(stack) = builder {
+            events.push(stack.into_event());
+        }
+        Self(events)
+    }
+
+    /// Number of grouped events.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// True when there are no events.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Borrow the underlying events.
+    pub fn as_slice(&self) -> &[GroupedEvent] {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for GroupedEventList {
+    type Target = [GroupedEvent];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<[GroupedEvent]> for GroupedEventList {
+    fn as_ref(&self) -> &[GroupedEvent] {
+        &self.0
+    }
+}
+
+impl IntoIterator for GroupedEventList {
+    type Item = GroupedEvent;
+    type IntoIter = std::vec::IntoIter<GroupedEvent>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a GroupedEventList {
+    type Item = &'a GroupedEvent;
+    type IntoIter = std::slice::Iter<'a, GroupedEvent>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
     }
 }
 
@@ -70,38 +151,11 @@ pub fn is_stack_head_message(level: char, message: &str) -> bool {
         || message.contains("fatal signal")
 }
 
-/// Folds time-ordered lines into events. Every line is consumed.
-pub fn fold_lines_to_events(lines: &[InsightLine]) -> Vec<InsightEvent> {
-    let mut events = Vec::new();
-    let mut builder: Option<LineStackBuilder> = None;
-
-    for line in lines {
-        if let Some(stack) = builder.as_mut() {
-            if is_stack_continuation(stack, line) {
-                stack.lines.push(line.clone());
-                continue;
-            }
-            events.push(builder.take().expect("stack builder present").into_event());
-        }
-
-        if is_stack_head_message(line.level, &line.message) {
-            builder = Some(LineStackBuilder::start(line.clone()));
-        } else {
-            events.push(InsightEvent::from_line(line.clone()));
-        }
-    }
-
-    if let Some(stack) = builder {
-        events.push(stack.into_event());
-    }
-    events
-}
-
-fn is_stack_continuation(builder: &LineStackBuilder, line: &InsightLine) -> bool {
+fn is_stack_continuation(builder: &LineStackBuilder, line: &IndexedLogLine) -> bool {
     if line.pid != builder.pid || is_stack_head_message(line.level, &line.message) {
         return false;
     }
-    if builder.lines.len() >= MAX_FOLD_LINES {
+    if builder.lines.len() >= MAX_GROUP_LINES {
         return false;
     }
 
@@ -135,11 +189,11 @@ struct LineStackBuilder {
     tag: String,
     level: char,
     index: usize,
-    lines: Vec<InsightLine>,
+    lines: Vec<IndexedLogLine>,
 }
 
 impl LineStackBuilder {
-    fn start(line: InsightLine) -> Self {
+    fn start(line: IndexedLogLine) -> Self {
         let lower = line.message.to_ascii_lowercase();
         let kind = if lower.contains("anr in") {
             StackKind::Anr
@@ -156,13 +210,13 @@ impl LineStackBuilder {
         }
     }
 
-    fn into_event(self) -> InsightEvent {
-        InsightEvent::from_lines(self.tag, self.level, self.pid, self.index, self.lines)
+    fn into_event(self) -> GroupedEvent {
+        GroupedEvent::from_lines(self.tag, self.level, self.pid, self.index, self.lines)
     }
 }
 
-impl InsightEvent {
-    fn from_line(line: InsightLine) -> Self {
+impl GroupedEvent {
+    fn from_line(line: IndexedLogLine) -> Self {
         Self::from_lines(
             line.tag.clone(),
             line.level,
@@ -177,7 +231,7 @@ impl InsightEvent {
         level: char,
         pid: u32,
         index: usize,
-        lines: Vec<InsightLine>,
+        lines: Vec<IndexedLogLine>,
     ) -> Self {
         let headline = lines.first().map(|l| l.message.clone()).unwrap_or_default();
         let samples: Vec<String> = lines.iter().map(|l| redact(&l.message)).collect();
@@ -196,8 +250,8 @@ impl InsightEvent {
 mod tests {
     use super::*;
 
-    fn line(index: usize, pid: u32, tag: &str, message: &str) -> InsightLine {
-        InsightLine {
+    fn line(index: usize, pid: u32, tag: &str, message: &str) -> IndexedLogLine {
+        IndexedLogLine {
             index,
             pid,
             level: 'E',
@@ -208,7 +262,8 @@ mod tests {
 
     #[test]
     fn single_error_is_one_event() {
-        let events = fold_lines_to_events(&[line(0, 1, "OkHttp", "boom")]);
+        let events =
+            GroupedEventList::group_from_indexed_log_lines(&[line(0, 1, "OkHttp", "boom")]);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].headline, "boom");
         assert_eq!(events[0].samples.len(), 1);
@@ -216,7 +271,7 @@ mod tests {
 
     #[test]
     fn fatal_stack_folds_to_one_event() {
-        let events = fold_lines_to_events(&[
+        let events = GroupedEventList::group_from_indexed_log_lines(&[
             line(0, 3178, "AndroidRuntime", "FATAL EXCEPTION: main"),
             line(
                 1,
@@ -250,7 +305,7 @@ mod tests {
 
     #[test]
     fn anr_head_folds_activity_manager_followups() {
-        let events = fold_lines_to_events(&[
+        let events = GroupedEventList::group_from_indexed_log_lines(&[
             line(
                 0,
                 14205,
@@ -273,7 +328,7 @@ mod tests {
 
     #[test]
     fn different_pid_does_not_fold() {
-        let events = fold_lines_to_events(&[
+        let events = GroupedEventList::group_from_indexed_log_lines(&[
             line(0, 1, "AndroidRuntime", "FATAL EXCEPTION: main"),
             line(1, 2, "AndroidRuntime", "at other.Process.main"),
         ]);

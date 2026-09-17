@@ -4,7 +4,7 @@
 //! Shared logcat fixtures: `fixtures/*.threadtime`.
 
 use logcatdigest::{
-    fold_lines_to_events, is_high_severity, parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
+    is_high_severity, parse_threadtime, GroupedEventList, IndexedLogLine, Snapshot, SnapshotOpts,
 };
 
 fn opts() -> SnapshotOpts {
@@ -19,15 +19,15 @@ fn digest(raw: &str) -> Snapshot {
     Snapshot::from_lines(&lines, opts())
 }
 
-fn fold_error_events(raw: &str) -> Vec<logcatdigest::InsightEvent> {
+fn group_error_events(raw: &str) -> GroupedEventList {
     let parsed: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    let insight: Vec<InsightLine> = parsed
+    let indexed: Vec<IndexedLogLine> = parsed
         .iter()
         .filter(|l| l.is_error_level())
         .enumerate()
-        .map(|(i, l)| InsightLine::from((i, l)))
+        .map(|(i, l)| IndexedLogLine::from((i, l)))
         .collect();
-    fold_lines_to_events(&insight)
+    GroupedEventList::group_from_indexed_log_lines(&indexed)
 }
 
 fn cluster_is_high(c: &logcatdigest::Cluster) -> bool {
@@ -63,7 +63,7 @@ fn assert_api_payload(snap: &Snapshot) {
 #[test]
 fn errors_only_clusters_ordinary_failures() {
     let raw = include_str!("../fixtures/errors.threadtime");
-    let events = fold_error_events(raw);
+    let events = group_error_events(raw);
     assert!(
         events.iter().all(|e| !e.is_high_severity()),
         "errors fixture must not contain FATAL/ANR/panic shapes"
@@ -109,7 +109,7 @@ fn errors_only_clusters_ordinary_failures() {
 #[test]
 fn errors_and_panics_folds_stacks_and_keeps_errors() {
     let raw = include_str!("../fixtures/errors_and_panics.threadtime");
-    let events = fold_error_events(raw);
+    let events = group_error_events(raw);
     assert!(
         events
             .iter()
@@ -166,7 +166,7 @@ fn errors_and_panics_folds_stacks_and_keeps_errors() {
 #[test]
 fn panics_only_high_severity_clusters() {
     let raw = include_str!("../fixtures/panics.threadtime");
-    let events = fold_error_events(raw);
+    let events = group_error_events(raw);
     assert!(
         !events.is_empty() && events.iter().all(|e| e.is_high_severity()),
         "panics fixture should only keep high-severity E/F events"

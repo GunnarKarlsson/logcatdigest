@@ -27,7 +27,7 @@ You cannot usefully stream raw logcat into a Chat Completions API:
 
 ## Solution
 
-Filter to errors, fold stacks (redacting sample lines), fingerprint noisy text so
+Filter to errors, group stacks (redacting sample lines), fingerprint noisy text so
 identical bugs hash the same, and consolidate matching errors into a small JSON
 **snapshot** (≤8 clusters, ~6 KB). Use `digest_key()` to call the model only when
 the mix changes.
@@ -47,11 +47,11 @@ logcatdigest = "0.1"
 
 ## Quick start
 
-One path: parse → filter → fold (redact) → fingerprint/cluster → gate the API call.
+One path: parse → filter → group (redact) → fingerprint/cluster → gate the API call.
 
 ```rust
 use logcatdigest::{
-    fold_lines_to_events, parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
+    parse_threadtime, GroupedEventList, IndexedLogLine, Snapshot, SnapshotOpts,
 };
 
 fn main() {
@@ -71,14 +71,14 @@ fn main() {
     // 1. Parse threadtime logcat
     let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
 
-    // 2. Filter to E/F, then fold stacks (sample lines are redacted on each event)
-    let insight: Vec<_> = lines
+    // 2. Filter to E/F, then group stacks (sample lines are redacted on each event)
+    let indexed: Vec<_> = lines
         .iter()
         .enumerate()
         .filter(|(_, l)| !opts.errors_only || l.is_error_level())
-        .map(|(i, l)| InsightLine::from((i, l)))
+        .map(|(i, l)| IndexedLogLine::from((i, l)))
         .collect();
-    let events = fold_lines_to_events(&insight);
+    let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
 
     // 3. Fingerprint + consolidate identical errors → Chat Completions snapshot
     let snap = Snapshot::from_events(&events, opts);
@@ -100,7 +100,7 @@ fn main() {
 Runnable examples:
 
 ```text
-cargo run --example pipeline   # fixtures → composed parse/fold/snapshot path
+cargo run --example pipeline   # fixtures → composed parse/group/snapshot path
 cargo run --example snapshot   # small inline log → Snapshot::from_lines
 ```
 
@@ -108,8 +108,8 @@ cargo run --example snapshot   # small inline log → Snapshot::from_lines
 
 1. **Parse** `adb logcat -v threadtime` → `LogLine` (no UI wrapping).
 2. **Filter** to `E`/`F` when `errors_only` (default).
-3. **Fold** multi-line fatal/ANR stacks by PID → events; **redact** secrets into
-   `InsightEvent::samples`.
+3. **Group** multi-line fatal/ANR stacks by PID → `GroupedEvent`; **redact** secrets
+   into samples.
 4. **Fingerprint** after collapsing hex, paths, and numbers so the same bug
    hashes the same across runs.
 5. **Cluster** (≤8), pin up to 2 high-severity shapes, trim to ~6 KB JSON.
@@ -122,7 +122,9 @@ benign IDs. Do not claim PII-safe output.
 | Item | Role |
 |---|---|
 | `parse_threadtime` / `LogLine` | Parse one threadtime line |
-| `fold_lines_to_events` | Fold stacks; redact samples onto events |
+| `IndexedLogLine` | `LogLine` + order index |
+| `GroupedEventList::group_from_indexed_log_lines` | Group stacks; redact samples |
+| `GroupedEvent` / `GroupedEventList` | One error or stack; list of them |
 | `SnapshotOpts::builder` | Typestate builder for device label/model |
 | `Snapshot::from_lines` | Parsed `LogLine`s → `Snapshot` |
 | `Snapshot::from_events` | Fingerprint + cluster events → `Snapshot` |

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Snapshot::from_lines` / `from_events` as the digest entry points.
 - `DeviceLabel` / `DeviceModel` newtypes (`DeviceLabel::new`,
   `From<(&str, &str)>`, `DeviceModel::new` / `From<&str>`).
+- Rename pipeline types: `IndexedLogLine` / `GroupedEvent` /
+  `GroupedEventList::group_from_indexed_log_lines` (was Insight* / fold_*).
 - Community and packaging polish: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY,
   GitHub Actions CI/release workflows, and issue templates.
 - Deny missing docs on the public API; field-level rustdoc on exported types.

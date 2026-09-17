@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 
-use crate::event::InsightEvent;
+use crate::event::GroupedEvent;
 use crate::fingerprint::fingerprint;
 use crate::severity::is_high_severity;
 use crate::snapshot::Cluster;
@@ -13,7 +13,7 @@ pub(crate) const MAX_HIGH_PIN: usize = 2;
 pub(crate) const MAX_JSON_BYTES: usize = 6 * 1024;
 
 /// Absorb events into fingerprint clusters.
-pub fn absorb(events: &[InsightEvent]) -> Vec<Cluster> {
+pub fn absorb(events: &[GroupedEvent]) -> Vec<Cluster> {
     let mut map: HashMap<String, Cluster> = HashMap::new();
     for event in events {
         let fp = fingerprint(&event.tag, &event.headline);

@@ -26,7 +26,7 @@ toolchain. Do not raise MSRV without a reason in the PR.
 
 ## Code
 
-- Parser, redaction, fingerprint, and fold changes need a test (fixture-driven
+- Parser, redaction, fingerprint, and group changes need a test (fixture-driven
   when the input is multi-line logcat).
 - Keep the crate free of adb child processes and HTTP clients. New runtime deps
   need an issue first.

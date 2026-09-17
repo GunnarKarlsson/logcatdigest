@@ -29,7 +29,7 @@ body:
     attributes:
       label: Area
       options:
-        - Parse / fold
+        - Parse / group
         - Redaction / fingerprint
         - Snapshot / clustering
         - Packaging / docs / examples

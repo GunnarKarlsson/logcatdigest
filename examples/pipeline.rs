@@ -1,6 +1,6 @@
 //! End-to-end digest: raw threadtime logcat → Chat Completions payload.
 //!
-//! One linear path: parse → filter → fold (redact) → fingerprint/cluster →
+//! One linear path: parse → filter → group (redact) → fingerprint/cluster →
 //! gate the model call. Fixtures in `fixtures/` (shared with `tests/pipeline.rs`).
 //!
 //! ```bash
@@ -8,7 +8,7 @@
 //! ```
 
 use logcatdigest::{
-    fold_lines_to_events, parse_threadtime, InsightLine, LogLine, Snapshot, SnapshotOpts,
+    parse_threadtime, GroupedEventList, IndexedLogLine, LogLine, Snapshot, SnapshotOpts,
 };
 
 fn main() {
@@ -50,7 +50,7 @@ fn main() {
     }
 }
 
-/// Parse → filter → fold (redact samples) → fingerprint/cluster → Snapshot.
+/// Parse → filter → group (redact samples) → fingerprint/cluster → Snapshot.
 fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
     // 1. Parse threadtime (UI wrapping / non-matching lines dropped)
     let parsed: Vec<LogLine> = raw.lines().filter_map(parse_threadtime).collect();
@@ -62,22 +62,22 @@ fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
     );
 
     // 2. Filter to E/F when errors_only (default)
-    let insight: Vec<InsightLine> = parsed
+    let indexed: Vec<IndexedLogLine> = parsed
         .iter()
         .enumerate()
         .filter(|(_, l)| !opts.errors_only || l.is_error_level())
-        .map(|(i, l)| InsightLine::from((i, l)))
+        .map(|(i, l)| IndexedLogLine::from((i, l)))
         .collect();
     println!(
         "filter: {} kept for digest (errors_only={})",
-        insight.len(),
+        indexed.len(),
         opts.errors_only
     );
 
-    // 3. Fold fatal/ANR stacks; sample lines are redacted here
-    let events = fold_lines_to_events(&insight);
+    // 3. Group fatal/ANR stacks; sample lines are redacted here
+    let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
     println!(
-        "fold:   {} events (stacks collapsed; samples redacted)",
+        "group:  {} events (stacks collapsed; samples redacted)",
         events.len()
     );
     for ev in &events {

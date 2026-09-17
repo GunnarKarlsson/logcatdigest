@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use crate::event::{fold_lines_to_events, InsightEvent, InsightLine};
+use crate::event::{GroupedEventList, IndexedLogLine};
 use crate::fingerprint::{DeviceLabel, DeviceModel};
 use crate::parse::LogLine;
 use crate::reduce::{absorb, retain_clusters, trim_to_json_budget};
@@ -142,7 +142,7 @@ pub struct Cluster {
     pub tag: String,
     /// Representative priority letter.
     pub level: char,
-    /// How many events folded into this cluster.
+    /// How many events grouped into this cluster.
     pub count: u32,
     /// Redacted sample messages (stacks may span several lines).
     pub samples: Vec<String>,
@@ -162,26 +162,26 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    /// Filter, fold (redact), fingerprint, and cluster already-parsed log lines.
+    /// Filter, group (redact), fingerprint, and cluster already-parsed log lines.
     pub fn from_lines(lines: &[LogLine], opts: SnapshotOpts) -> Self {
-        let insight: Vec<InsightLine> = lines
+        let indexed: Vec<IndexedLogLine> = lines
             .iter()
             .enumerate()
             .filter(|(_, l)| !opts.errors_only || l.is_error_level())
-            .map(|(i, l)| InsightLine::from((i, l)))
+            .map(|(i, l)| IndexedLogLine::from((i, l)))
             .collect();
 
-        let events = fold_lines_to_events(&insight);
+        let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
         Self::from_events(&events, opts)
     }
 
-    /// Fingerprint and consolidate folded events into a Chat Completions snapshot.
+    /// Fingerprint and consolidate grouped events into a Chat Completions snapshot.
     ///
-    /// Events should already carry redacted [`InsightEvent::samples`] (as produced by
-    /// [`fold_lines_to_events`]). Identical bugs collapse by fingerprint; the result
-    /// is pinned/trimmed to the cluster and JSON budgets.
-    pub fn from_events(events: &[InsightEvent], opts: SnapshotOpts) -> Self {
-        let mut clusters = absorb(events);
+    /// Events should already carry redacted [`GroupedEvent::samples`] (as produced by
+    /// [`GroupedEventList::group_from_indexed_log_lines`]). Identical bugs collapse by
+    /// fingerprint; the result is pinned/trimmed to the cluster and JSON budgets.
+    pub fn from_events(events: &GroupedEventList, opts: SnapshotOpts) -> Self {
+        let mut clusters = absorb(events.as_slice());
         retain_clusters(&mut clusters, opts.max_clusters);
         trim_to_json_budget(&mut clusters);
 
