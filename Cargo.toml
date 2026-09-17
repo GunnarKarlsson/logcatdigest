@@ -1,0 +1,30 @@
+[package]
+name = "logcat-digest"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+authors = ["Gunnar Karlsson <gunnar.h.karlsson@gmail.com>"]
+description = "Turn Android logcat into a redacted, clustered snapshot for Chat Completions."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/GunnarKarlsson/logcat-digest"
+homepage = "https://github.com/GunnarKarlsson/logcat-digest"
+documentation = "https://docs.rs/logcat-digest"
+keywords = ["android", "logcat", "adb", "llm"]
+categories = ["parser-implementations", "development-tools"]
+include = [
+    "src/**/*",
+    "examples/**/*",
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+]
+
+[dependencies]
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]

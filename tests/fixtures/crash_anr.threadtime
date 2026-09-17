@@ -1,0 +1,15 @@
+--------- beginning of main
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: FATAL EXCEPTION: main
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: Process: com.example.app, PID: 2144
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: java.lang.NullPointerException: boom at line 42
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: 	at com.example.app.MainActivity.onCreate(MainActivity.kt:42)
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: 	at android.app.Activity.performCreate(Activity.java:8591)
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: Caused by: java.lang.IllegalStateException: missing
+09-17 12:01:03.120  2144  2144 E AndroidRuntime: 	at com.example.app.ApiClient.fetch(ApiClient.kt:17)
+09-17 12:01:10.500 14205 14205 E ActivityManager: ANR in com.example.myapp (com.example.myapp/.MainActivity)
+09-17 12:01:10.500 14205 14205 E ActivityManager: PID: 14205
+09-17 12:01:10.500 14205 14205 E ActivityManager: Reason: Input dispatching timed out
+09-17 12:01:11.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo
+09-17 12:01:11.050  2144  2201 E OkHttp: failed 9 times at /data/app/bar
+09-17 12:01:12.000  3001  3001 E System: user a@b.com connect failed to 10.0.0.1 token=sk-secret
+09-17 12:01:13.000  4000  4000 I chatty  : uid=1000 identical 5 lines
