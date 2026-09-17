@@ -1,0 +1,16 @@
+--------- beginning of crash
+09-17 12:02:00.000  5000  5000 I Zygote  : Process 3178 exited due to signal (9)
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: FATAL EXCEPTION: main
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: Process: com.android.settings, PID: 3178
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: java.lang.RuntimeException: Unable to start activity
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: 	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3840)
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: 	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:4020)
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: Caused by: java.lang.IllegalArgumentException: bad arg
+09-17 12:02:01.100  3178  3178 E AndroidRuntime: 	at com.android.settings.SettingsActivity.onCreate(SettingsActivity.java:88)
+09-17 12:02:02.000  1001  1001 D ActivityManager: freezing 3178 com.android.settings
+09-17 12:02:03.500  1820  1820 F DEBUG   : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 1820 (native-worker)
+09-17 12:02:04.000 14205 14205 E ActivityManager: ANR in com.example.myapp (com.example.myapp/.MainActivity)
+09-17 12:02:04.000 14205 14205 E ActivityManager: PID: 14205
+09-17 12:02:04.000 14205 14205 E ActivityManager: Reason: Input dispatching timed out
+09-17 12:02:05.000  4000  4000 I chatty  : uid=1000 identical 2 lines
+09-17 12:02:06.000  2144  2144 D TrafficStats: tagSocket(88) with statsTag=0x1

@@ -15,6 +15,7 @@ categories = ["parser-implementations", "development-tools"]
 include = [
     "src/**/*",
     "examples/**/*",
+    "fixtures/**/*",
     "Cargo.toml",
     "LICENSE",
     "README.md",

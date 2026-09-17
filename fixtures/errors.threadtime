@@ -1,0 +1,12 @@
+--------- beginning of main
+--------- beginning of system
+09-17 12:00:01.010  1001  1001 I ActivityManager: Start proc 2144:com.example.app
+09-17 12:00:01.200  2144  2144 D OpenGLRenderer: SkiaGLPipeline initialized
+09-17 12:00:02.100  2144  2201 W OkHttp  : slow call /v1/feed took 1200ms
+09-17 12:00:03.001  2144  2201 E OkHttp  : unexpected end of stream on Connection{api.example.com:443}
+09-17 12:00:03.050  2144  2201 E OkHttp  : unexpected end of stream on Connection{cdn.example.com:443}
+09-17 12:00:03.100  2144  2201 E OkHttp  : unexpected end of stream on Connection{api.example.com:443}
+09-17 12:00:04.000  3001  3001 E System  : user a@b.com connect failed to 10.0.0.1 token=sk-secret
+09-17 12:00:04.500  2144  2150 E SQLiteLog: (1) no such table: sessions_v2
+09-17 12:00:05.000  4000  4000 I chatty  : uid=1000 identical 5 lines
+09-17 12:00:06.000  2144  2144 D TrafficStats: tagSocket(102) with statsTag=0xffffffff

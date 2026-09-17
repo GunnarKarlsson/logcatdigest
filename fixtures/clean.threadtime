@@ -1,0 +1,9 @@
+--------- beginning of main
+09-17 12:03:00.010  1001  1001 I ActivityManager: Start proc 2144:com.example.app
+09-17 12:03:00.100  2144  2144 D OpenGLRenderer: SkiaGLPipeline initialized
+09-17 12:03:00.200  2144  2144 I art     : Rejecting re-init on previously-failed class
+09-17 12:03:01.000  2144  2201 W OkHttp  : slow call /v1/feed took 900ms
+09-17 12:03:01.500  2144  2144 D NetworkSecurityConfig: Using Network Security Config from resource
+09-17 12:03:02.000  2144  2144 I MainActivity: onResume
+09-17 12:03:03.000  4000  4000 I chatty  : uid=1000 identical 3 lines
+09-17 12:03:04.000  2144  2144 V InputMethodManager: Starting input: window=abc
