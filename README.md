@@ -49,7 +49,7 @@ logcatdigest = "0.1"
 ## Quick start
 
 ```rust
-use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
+use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOptions};
 
 fn main() {
     let raw = r#"
@@ -60,7 +60,7 @@ fn main() {
 09-17 12:01:04.050  2144  2201 E OkHttp: failed 9 times at /data/app/bar
 "#;
 
-    let opts = SnapshotOpts::builder()
+    let opts = SnapshotOptions::builder()
         .device_label(("Pixel 8", "emulator-5554"))
         .device_model("Pixel 8")
         .content_types([ContentType::Fatal, ContentType::Anr, ContentType::Crash])
@@ -110,13 +110,26 @@ benign IDs. Do not claim PII-safe output.
 
 | Item | Role |
 |---|---|
-| `SnapshotOpts::builder` | Optional device fields + filters |
+| `SnapshotOptions::builder` | Optional device fields + filters (see below) |
 | `ContentType` | `Fatal` / `Anr` / `Crash` (empty = all) |
 | `LogLevel` | Priority filter (default Error + Fatal) |
 | `Snapshot::from_logcat_lines` | Raw threadtime lines → `Snapshot` |
 | `Snapshot::is_empty` | Skip the model when nothing matched |
 | `DeviceLabel` / `DeviceModel` | Typed device id and model on snapshots |
 | `Snapshot::to_pretty_json` / `digest_key` | LLM payload + change detection |
+
+`SnapshotOptions::builder` methods (all optional; `.build()` always succeeds):
+
+| Method | Default / empty meaning |
+|---|---|
+| `.device_label(...)` | Empty label when omitted |
+| `.device_model(...)` | Empty model when omitted |
+| `.content_types([...])` | Empty = all content types |
+| `.levels([...])` | Default Error + Fatal |
+| `.tags([...])` | Empty = all tags |
+| `.contains(...)` | No substring filter when omitted |
+| `.max_clusters(n)` | Default 8 |
+| `.build()` | Finish into `SnapshotOptions` |
 
 Full types: [docs.rs/logcatdigest](https://docs.rs/logcatdigest).
 

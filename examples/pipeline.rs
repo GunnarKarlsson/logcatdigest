@@ -7,12 +7,12 @@
 //! cargo run --example pipeline
 //! ```
 
-use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
+use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOptions};
 
 fn main() {
     // Every builder method listed. Empty content_types / tags = no extra filter;
     // empty contains matches all text (omit `.contains` when unused).
-    let opts = SnapshotOpts::builder()
+    let opts = SnapshotOptions::builder()
         .device_label(("Pixel 8", "emulator-5554"))
         .device_model("Pixel 8")
         .content_types(Vec::<ContentType>::new())

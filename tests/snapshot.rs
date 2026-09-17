@@ -1,11 +1,11 @@
-use logcatdigest::{Snapshot, SnapshotOpts};
+use logcatdigest::{Snapshot, SnapshotOptions};
 
 #[test]
 fn fixture_crash_anr_snapshot() {
     let raw = include_str!("../fixtures/crash_anr.threadtime");
     let snap = Snapshot::from_logcat_lines(
         raw.lines(),
-        SnapshotOpts::builder()
+        SnapshotOptions::builder()
             .device_label(("Pixel 8", "emulator-5554"))
             .device_model("Pixel 8")
             .build(),

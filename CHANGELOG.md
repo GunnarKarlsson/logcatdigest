@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `ContentType` (`Fatal` / `Anr` / `Crash`) and `LogLevel` filter enums.
-- `SnapshotOpts` optional filters: `content_types`, `levels`, `tags`, `contains`.
+- `SnapshotOptions` optional filters: `content_types`, `levels`, `tags`, `contains`.
 - `Snapshot::from_logcat_lines` accepts raw threadtime strings; `Snapshot::is_empty`.
 - Optional `device_label` / `device_model` on the builder (empty when omitted).
 - Community and packaging polish: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY,
@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`IndexedLogLine`, `GroupedEvent`, parse/redact/fingerprint helpers) are crate-private.
 - Default levels are Error + Fatal (replaces `errors_only`).
 - Builder methods renamed: `.device_label` / `.device_model` (no typestate).
+- Type renamed `SnapshotOpts` → `SnapshotOptions` (and `SnapshotOptionsBuilder`).
 
 ### Removed
 

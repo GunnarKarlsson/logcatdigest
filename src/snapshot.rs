@@ -17,7 +17,7 @@ fn default_levels() -> Vec<LogLevel> {
 
 /// Options for [`Snapshot::from_logcat_lines`].
 #[derive(Debug, Clone)]
-pub struct SnapshotOpts {
+pub struct SnapshotOptions {
     /// Non-reversible device id; empty when unset.
     pub device_label: DeviceLabel,
     /// Human-readable model; empty when unset.
@@ -34,10 +34,10 @@ pub struct SnapshotOpts {
     pub max_clusters: usize,
 }
 
-impl SnapshotOpts {
-    /// Start an optional-field builder. [`SnapshotOptsBuilder::build`] always succeeds.
-    pub fn builder() -> SnapshotOptsBuilder {
-        SnapshotOptsBuilder::default()
+impl SnapshotOptions {
+    /// Start an optional-field builder. [`SnapshotOptionsBuilder::build`] always succeeds.
+    pub fn builder() -> SnapshotOptionsBuilder {
+        SnapshotOptionsBuilder::default()
     }
 
     fn allows_level(&self, level: char) -> bool {
@@ -78,7 +78,7 @@ fn event_text(event: &GroupedEvent) -> String {
     }
 }
 
-impl Default for SnapshotOpts {
+impl Default for SnapshotOptions {
     fn default() -> Self {
         Self {
             device_label: DeviceLabel::default(),
@@ -92,9 +92,9 @@ impl Default for SnapshotOpts {
     }
 }
 
-/// Builder for [`SnapshotOpts`]. Every field is optional.
+/// Builder for [`SnapshotOptions`]. Every field is optional.
 #[derive(Debug, Clone)]
-pub struct SnapshotOptsBuilder {
+pub struct SnapshotOptionsBuilder {
     device_label: DeviceLabel,
     device_model: DeviceModel,
     content_types: Vec<ContentType>,
@@ -104,7 +104,7 @@ pub struct SnapshotOptsBuilder {
     max_clusters: usize,
 }
 
-impl Default for SnapshotOptsBuilder {
+impl Default for SnapshotOptionsBuilder {
     fn default() -> Self {
         Self {
             device_label: DeviceLabel::default(),
@@ -118,7 +118,7 @@ impl Default for SnapshotOptsBuilder {
     }
 }
 
-impl SnapshotOptsBuilder {
+impl SnapshotOptionsBuilder {
     /// Set the device label (`DeviceLabel` or `(model, serial)`).
     pub fn device_label(mut self, label: impl Into<DeviceLabel>) -> Self {
         self.device_label = label.into();
@@ -161,9 +161,9 @@ impl SnapshotOptsBuilder {
         self
     }
 
-    /// Finish the builder into [`SnapshotOpts`].
-    pub fn build(self) -> SnapshotOpts {
-        SnapshotOpts {
+    /// Finish the builder into [`SnapshotOptions`].
+    pub fn build(self) -> SnapshotOptions {
+        SnapshotOptions {
             device_label: self.device_label,
             device_model: self.device_model,
             content_types: self.content_types,
@@ -209,7 +209,7 @@ impl Snapshot {
     /// Non-matching lines are dropped. Empty result means nothing matched the filters.
     pub fn from_logcat_lines(
         lines: impl IntoIterator<Item = impl AsRef<str>>,
-        opts: SnapshotOpts,
+        opts: SnapshotOptions,
     ) -> Self {
         let parsed: Vec<LogLine> = lines
             .into_iter()
@@ -218,7 +218,7 @@ impl Snapshot {
         Self::from_parsed_lines(&parsed, opts)
     }
 
-    fn from_parsed_lines(lines: &[LogLine], opts: SnapshotOpts) -> Self {
+    fn from_parsed_lines(lines: &[LogLine], opts: SnapshotOptions) -> Self {
         let indexed: Vec<IndexedLogLine> = lines
             .iter()
             .enumerate()
@@ -294,7 +294,8 @@ mod tests {
 
     #[test]
     fn empty_snapshot() {
-        let snap = Snapshot::from_logcat_lines(std::iter::empty::<&str>(), SnapshotOpts::default());
+        let snap =
+            Snapshot::from_logcat_lines(std::iter::empty::<&str>(), SnapshotOptions::default());
         assert!(snap.is_empty());
         assert_eq!(snap.levels, ["E", "F"]);
     }
@@ -307,8 +308,10 @@ mod tests {
             raw('E', "OkHttp", "failed host 3"),
             raw('E', "System", "disk full"),
         ];
-        let snap =
-            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
+        let snap = Snapshot::from_logcat_lines(
+            lines.iter().map(String::as_str),
+            SnapshotOptions::default(),
+        );
         assert_eq!(snap.clusters.len(), 2);
         assert_eq!(snap.clusters[0].tag, "OkHttp");
         assert_eq!(snap.clusters[0].count, 3);
@@ -322,8 +325,10 @@ mod tests {
             raw('I', "OkHttp", "ok"),
             raw('F', "AndroidRuntime", "FATAL EXCEPTION"),
         ];
-        let snap =
-            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
+        let snap = Snapshot::from_logcat_lines(
+            lines.iter().map(String::as_str),
+            SnapshotOptions::default(),
+        );
         assert_eq!(snap.clusters.len(), 1);
         assert_eq!(snap.clusters[0].tag, "AndroidRuntime");
     }
@@ -335,8 +340,10 @@ mod tests {
             "AndroidRuntime",
             "token Bearer secret.jwt password=s3cret",
         )];
-        let snap =
-            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
+        let snap = Snapshot::from_logcat_lines(
+            lines.iter().map(String::as_str),
+            SnapshotOptions::default(),
+        );
         assert!(!snap.clusters[0].samples[0].contains("secret.jwt"));
         assert!(!snap.clusters[0].samples[0].contains("s3cret"));
     }
@@ -351,7 +358,7 @@ mod tests {
                 "ANR in com.example.app (com.example.app/.Main)",
             ),
         ];
-        let opts = SnapshotOpts::builder()
+        let opts = SnapshotOptions::builder()
             .content_types([ContentType::Anr])
             .build();
         let snap = Snapshot::from_logcat_lines(lines.iter().map(String::as_str), opts);
@@ -366,7 +373,7 @@ mod tests {
             raw('E', "System", "NullPointerException at bar"),
             raw('E', "OkHttp", "timeout"),
         ];
-        let opts = SnapshotOpts::builder()
+        let opts = SnapshotOptions::builder()
             .tags(["OkHttp"])
             .contains("NullPointer")
             .build();
@@ -377,7 +384,7 @@ mod tests {
 
     #[test]
     fn optional_device_fields_default_empty() {
-        let opts = SnapshotOpts::builder().build();
+        let opts = SnapshotOptions::builder().build();
         assert!(opts.device_label.is_empty());
         assert!(opts.device_model.is_empty());
         let snap = Snapshot::from_logcat_lines(
@@ -402,9 +409,9 @@ mod tests {
             raw('E', "OkHttp", "failed host 4"),
         ];
         let snap_a =
-            Snapshot::from_logcat_lines(a.iter().map(String::as_str), SnapshotOpts::default());
+            Snapshot::from_logcat_lines(a.iter().map(String::as_str), SnapshotOptions::default());
         let snap_b =
-            Snapshot::from_logcat_lines(b.iter().map(String::as_str), SnapshotOpts::default());
+            Snapshot::from_logcat_lines(b.iter().map(String::as_str), SnapshotOptions::default());
         assert_eq!(snap_a.digest_key(), snap_b.digest_key());
     }
 
@@ -416,9 +423,9 @@ mod tests {
             raw('F', "AndroidRuntime", "FATAL EXCEPTION"),
         ];
         let snap_a =
-            Snapshot::from_logcat_lines(a.iter().map(String::as_str), SnapshotOpts::default());
+            Snapshot::from_logcat_lines(a.iter().map(String::as_str), SnapshotOptions::default());
         let snap_b =
-            Snapshot::from_logcat_lines(b.iter().map(String::as_str), SnapshotOpts::default());
+            Snapshot::from_logcat_lines(b.iter().map(String::as_str), SnapshotOptions::default());
         assert_ne!(snap_a.digest_key(), snap_b.digest_key());
         assert!(snap_b.has_new_high_severity(&snap_a.digest_key()));
     }
@@ -445,8 +452,10 @@ mod tests {
             "AndroidRuntime",
             "at android.app.ActivityThread.main(ActivityThread.java:1)",
         ));
-        let snap =
-            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
+        let snap = Snapshot::from_logcat_lines(
+            lines.iter().map(String::as_str),
+            SnapshotOptions::default(),
+        );
         let runtime = snap
             .clusters
             .iter()
@@ -460,14 +469,14 @@ mod tests {
     #[test]
     fn parse_then_build_roundtrip() {
         let raw_line = "09-17 12:01:04.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo";
-        let snap = Snapshot::from_logcat_lines([raw_line], SnapshotOpts::default());
+        let snap = Snapshot::from_logcat_lines([raw_line], SnapshotOptions::default());
         assert_eq!(snap.clusters.len(), 1);
         assert_eq!(snap.clusters[0].tag, "OkHttp");
     }
 
     #[test]
     fn builder_sets_optional_device_and_filters() {
-        let opts = SnapshotOpts::builder()
+        let opts = SnapshotOptions::builder()
             .device_label(("Pixel 8", "emulator-5554"))
             .device_model("Pixel 8")
             .content_types([ContentType::Crash])

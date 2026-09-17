@@ -9,10 +9,10 @@
 //! # Example
 //!
 //! ```
-//! use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
+//! use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOptions};
 //!
 //! let raw = "09-17 12:01:03.120  2144  2144 E AndroidRuntime: FATAL EXCEPTION: main";
-//! let opts = SnapshotOpts::builder()
+//! let opts = SnapshotOptions::builder()
 //!     .device_label(("Pixel 8", "emulator-5554"))
 //!     .device_model("Pixel 8")
 //!     .content_types([ContentType::Fatal, ContentType::Anr, ContentType::Crash])
@@ -39,4 +39,4 @@ mod snapshot;
 
 pub use content::{ContentType, LogLevel};
 pub use fingerprint::{DeviceLabel, DeviceModel};
-pub use snapshot::{Cluster, Snapshot, SnapshotOpts, SnapshotOptsBuilder};
+pub use snapshot::{Cluster, Snapshot, SnapshotOptions, SnapshotOptionsBuilder};

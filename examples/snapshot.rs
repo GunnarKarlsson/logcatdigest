@@ -1,10 +1,10 @@
-//! Small inline log → fully configured `SnapshotOpts` → JSON snapshot.
+//! Small inline log → fully configured `SnapshotOptions` → JSON snapshot.
 //!
 //! ```bash
 //! cargo run --example snapshot
 //! ```
 
-use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
+use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOptions};
 
 fn main() {
     let raw = r#"
@@ -14,7 +14,7 @@ fn main() {
 09-17 12:01:04.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo token=sk-secret
 "#;
 
-    let opts = SnapshotOpts::builder()
+    let opts = SnapshotOptions::builder()
         .device_label(("Pixel 8", "emulator-5554"))
         .device_model("Pixel 8")
         .content_types([ContentType::Fatal, ContentType::Anr, ContentType::Crash])

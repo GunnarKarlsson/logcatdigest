@@ -3,10 +3,10 @@
 //!
 //! Shared logcat fixtures: `fixtures/*.threadtime`.
 
-use logcatdigest::{Cluster, ContentType, Snapshot, SnapshotOpts};
+use logcatdigest::{Cluster, ContentType, Snapshot, SnapshotOptions};
 
-fn opts() -> SnapshotOpts {
-    SnapshotOpts::builder()
+fn opts() -> SnapshotOptions {
+    SnapshotOptions::builder()
         .device_label(("Pixel 8", "emulator-5554"))
         .device_model("Pixel 8")
         .build()
@@ -181,7 +181,7 @@ fn content_type_filter_anr_only() {
     let raw = include_str!("../fixtures/errors_and_panics.threadtime");
     let snap = Snapshot::from_logcat_lines(
         raw.lines(),
-        SnapshotOpts::builder()
+        SnapshotOptions::builder()
             .device_label(("Pixel 8", "emulator-5554"))
             .device_model("Pixel 8")
             .content_types([ContentType::Anr])
