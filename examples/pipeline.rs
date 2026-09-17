@@ -1,16 +1,15 @@
-//! End-to-end digest pipeline: raw threadtime logcat → Chat Completions payload.
+//! End-to-end digest: raw threadtime logcat → Chat Completions payload.
 //!
-//! Walks every major stage (parse → fold → redact → fingerprint → snapshot) on
-//! four log mixes: ordinary errors, errors + panics, panics only, and clean.
-//! Fixtures live in `fixtures/` (shared with `tests/pipeline.rs`).
+//! One linear path: parse → filter → fold (redact) → fingerprint/cluster →
+//! gate the model call. Fixtures in `fixtures/` (shared with `tests/pipeline.rs`).
 //!
 //! ```bash
 //! cargo run --example pipeline
 //! ```
 
 use logcatdigest::{
-    digest_threadtime, fingerprint, fold_lines_to_events, generate_device_label, parse_threadtime,
-    redact, InsightLine, LogLine, Snapshot, SnapshotOpts,
+    build_snapshot_from_events, fold_lines_to_events, generate_device_label, parse_threadtime,
+    InsightLine, LogLine, Snapshot, SnapshotOpts,
 };
 
 fn main() {
@@ -53,64 +52,46 @@ fn main() {
     }
 }
 
-/// Run every major pipeline stage and print a short trace, then return the snapshot.
+/// Parse → filter → fold (redact samples) → fingerprint/cluster → Snapshot.
 fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
-    // --- parse ---
+    // 1. Parse threadtime (UI wrapping / non-matching lines dropped)
     let parsed: Vec<LogLine> = raw.lines().filter_map(parse_threadtime).collect();
     let dropped = raw.lines().filter(|l| !l.trim().is_empty()).count() - parsed.len();
     println!(
-        "parse: {} threadtime lines ({} non-matching dropped)",
+        "parse:  {} threadtime lines ({} non-matching dropped)",
         parsed.len(),
         dropped
     );
 
-    let errorish: Vec<&LogLine> = parsed
+    // 2. Filter to E/F when errors_only (default)
+    let insight: Vec<InsightLine> = parsed
         .iter()
-        .filter(|l| !opts.errors_only || l.is_error_level())
+        .enumerate()
+        .filter(|(_, l)| !opts.errors_only || l.is_error_level())
+        .map(|(i, l)| InsightLine::from((i, l)))
         .collect();
     println!(
         "filter: {} kept for digest (errors_only={})",
-        errorish.len(),
+        insight.len(),
         opts.errors_only
     );
 
-    // --- fold fatal/ANR stacks ---
-    let insight: Vec<InsightLine> = errorish
-        .iter()
-        .enumerate()
-        .map(|(i, l)| InsightLine::from((i, *l)))
-        .collect();
+    // 3. Fold fatal/ANR stacks; sample lines are redacted here
     let events = fold_lines_to_events(&insight);
-    println!("fold:   {} events (stacks collapsed by PID)", events.len());
+    println!("fold:   {} events (stacks collapsed; samples redacted)", events.len());
     for ev in &events {
+        let sample = ev.samples.first().map(String::as_str).unwrap_or("");
         println!(
-            "        - [{}] {} {} high_severity={} samples={}",
+            "        - [{}] {} high_severity={} sample={}",
             ev.level,
             ev.tag,
-            truncate(&ev.headline, 56),
             ev.is_high_severity(),
-            ev.samples.len()
+            truncate(sample, 56)
         );
     }
 
-    // --- redact + fingerprint (prefer a line that actually carries secrets) ---
-    let demo = events
-        .iter()
-        .find(|ev| redact(&ev.headline) != ev.headline)
-        .or_else(|| events.first());
-    if let Some(ev) = demo {
-        let redacted = redact(&ev.headline);
-        let fp = fingerprint(&ev.tag, &ev.headline);
-        println!(
-            "redact: {} → {}",
-            truncate(&ev.headline, 48),
-            truncate(&redacted, 48)
-        );
-        println!("finger: {fp}");
-    }
-
-    // --- snapshot (cluster + pin + JSON budget) ---
-    let snap = digest_threadtime(raw.lines(), opts);
+    // 4. Fingerprint identical bugs and consolidate into a budgeted snapshot
+    let snap = build_snapshot_from_events(&events, opts);
     println!(
         "snap:   {} cluster(s) digest_key={:?}",
         snap.clusters.len(),

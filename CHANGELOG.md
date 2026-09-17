@@ -9,9 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `build_snapshot_from_events` so callers can compose
+  parse → filter → fold (redact) → fingerprint/cluster in one linear path.
 - Community and packaging polish: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY,
   GitHub Actions CI/release workflows, and issue templates.
 - Deny missing docs on the public API; field-level rustdoc on exported types.
+
+### Changed
+
+- README and `examples/pipeline` show the composed digest path end-to-end
+  instead of demoing stages that were discarded before `digest_threadtime`.
 
 ## [0.1.0] - 2026-09-17
 

@@ -2,13 +2,14 @@
 
 use serde::Serialize;
 
-use crate::event::{fold_lines_to_events, InsightLine};
+use crate::event::{fold_lines_to_events, InsightEvent, InsightLine};
 use crate::parse::LogLine;
 use crate::reduce::{absorb, retain_clusters, trim_to_json_budget};
 
 const DIGEST_COUNT_BUCKET: u32 = 5;
 
-/// Options for [`build_snapshot`] / [`crate::digest_threadtime`].
+/// Options for [`build_snapshot`] / [`build_snapshot_from_events`] /
+/// [`crate::digest_threadtime`].
 #[derive(Debug, Clone)]
 pub struct SnapshotOpts {
     /// Non-reversible device id from [`crate::generate_device_label`].
@@ -91,6 +92,9 @@ impl Snapshot {
 }
 
 /// Build a snapshot from already-parsed log lines.
+///
+/// Filters (`errors_only`), folds stacks (redacting samples), then fingerprints
+/// and clusters via [`build_snapshot_from_events`].
 pub fn build_snapshot(lines: &[LogLine], opts: SnapshotOpts) -> Snapshot {
     let insight: Vec<InsightLine> = lines
         .iter()
@@ -100,7 +104,16 @@ pub fn build_snapshot(lines: &[LogLine], opts: SnapshotOpts) -> Snapshot {
         .collect();
 
     let events = fold_lines_to_events(&insight);
-    let mut clusters = absorb(&events);
+    build_snapshot_from_events(&events, opts)
+}
+
+/// Fingerprint and consolidate folded events into a Chat Completions snapshot.
+///
+/// Events should already carry redacted [`InsightEvent::samples`] (as produced by
+/// [`fold_lines_to_events`]). Identical bugs collapse by fingerprint; the result
+/// is pinned/trimmed to the cluster and JSON budgets.
+pub fn build_snapshot_from_events(events: &[InsightEvent], opts: SnapshotOpts) -> Snapshot {
+    let mut clusters = absorb(events);
     retain_clusters(&mut clusters, opts.max_clusters);
     trim_to_json_budget(&mut clusters);
 
