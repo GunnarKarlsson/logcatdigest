@@ -18,11 +18,17 @@ static LINE: LazyLock<Regex> = LazyLock::new(|| {
 /// One parsed threadtime logcat line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogLine {
+    /// Timestamp as printed by logcat (`MM-DD HH:MM:SS.mmm`).
     pub timestamp: String,
+    /// Process id.
     pub pid: u32,
+    /// Thread id.
     pub tid: u32,
+    /// Priority letter: `V`, `D`, `I`, `W`, `E`, or `F`.
     pub level: char,
+    /// Log tag (whitespace-trimmed).
     pub tag: String,
+    /// Message body after the tag colon.
     pub message: String,
 }
 

@@ -11,10 +11,13 @@ const DIGEST_COUNT_BUCKET: u32 = 5;
 /// Options for [`build_snapshot`] / [`crate::digest_threadtime`].
 #[derive(Debug, Clone)]
 pub struct SnapshotOpts {
+    /// Non-reversible device id from [`crate::generate_device_label`].
     pub device_label: String,
+    /// Human-readable model string stored on the snapshot.
     pub device_model: String,
     /// When true, only Error and Fatal lines are included.
     pub errors_only: bool,
+    /// Soft cap on retained clusters (high-severity shapes are pinned first).
     pub max_clusters: usize,
 }
 
@@ -32,19 +35,28 @@ impl Default for SnapshotOpts {
 /// One error shape: fingerprint, counts, and redacted samples.
 #[derive(Debug, Clone, Serialize)]
 pub struct Cluster {
+    /// Noise-stable hex fingerprint for this shape.
     pub fingerprint: String,
+    /// Representative log tag.
     pub tag: String,
+    /// Representative priority letter.
     pub level: char,
+    /// How many events folded into this cluster.
     pub count: u32,
+    /// Redacted sample messages (stacks may span several lines).
     pub samples: Vec<String>,
 }
 
 /// Reduced digest of log lines for one device.
 #[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
+    /// Non-reversible device label.
     pub device_label: String,
+    /// Human-readable device model.
     pub device_model: String,
+    /// Priority letters included in this digest (`E`/`F` when errors-only).
     pub levels: Vec<&'static str>,
+    /// Budgeted clusters, high-severity shapes first when pinned.
     pub clusters: Vec<Cluster>,
 }
 

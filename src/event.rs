@@ -11,10 +11,15 @@ const MAX_FOLD_LINES: usize = 32;
 /// One log line input to the reducer.
 #[derive(Debug, Clone)]
 pub struct InsightLine {
+    /// Stable order index from the source line list (not wall-clock time).
     pub index: usize,
+    /// Process id used when folding multi-line stacks.
     pub pid: u32,
+    /// Priority letter: `V`, `D`, `I`, `W`, `E`, or `F`.
     pub level: char,
+    /// Log tag.
     pub tag: String,
+    /// Message body (not yet redacted).
     pub message: String,
 }
 
@@ -33,9 +38,13 @@ impl From<(usize, &LogLine)> for InsightLine {
 /// One insight incident: a single error line, or a folded fatal/ANR stack.
 #[derive(Debug, Clone)]
 pub struct InsightEvent {
+    /// Index of the first line that formed this event.
     pub index: usize,
+    /// Process id of the event.
     pub pid: u32,
+    /// Priority letter from the head line.
     pub level: char,
+    /// Tag from the head line.
     pub tag: String,
     /// First line message; used for fingerprinting.
     pub headline: String,
@@ -232,12 +241,10 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].headline, "FATAL EXCEPTION: main");
         assert_eq!(events[0].samples.len(), 4);
-        assert!(
-            events[0]
-                .samples
-                .iter()
-                .any(|s| s.contains("shell-induced"))
-        );
+        assert!(events[0]
+            .samples
+            .iter()
+            .any(|s| s.contains("shell-induced")));
         assert_eq!(events[1].headline, "other error");
     }
 

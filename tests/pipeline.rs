@@ -81,7 +81,9 @@ fn errors_only_clusters_ordinary_failures() {
         .sum();
     assert_eq!(okhttp_total, 3, "three OkHttp E lines kept");
     assert!(
-        snap.clusters.iter().any(|c| c.tag == "OkHttp" && c.count == 2),
+        snap.clusters
+            .iter()
+            .any(|c| c.tag == "OkHttp" && c.count == 2),
         "api host failures should share a fingerprint"
     );
     assert!(snap.clusters.iter().any(|c| c.tag == "SQLiteLog"));
@@ -110,15 +112,21 @@ fn errors_and_panics_folds_stacks_and_keeps_errors() {
     let raw = include_str!("../fixtures/errors_and_panics.threadtime");
     let events = fold_error_events(raw);
     assert!(
-        events.iter().any(|e| e.tag == "AndroidRuntime" && e.samples.len() > 1),
+        events
+            .iter()
+            .any(|e| e.tag == "AndroidRuntime" && e.samples.len() > 1),
         "FATAL stack should fold to one multi-sample event"
     );
     assert!(
-        events.iter().any(|e| e.tag == "ActivityManager" && e.is_high_severity()),
+        events
+            .iter()
+            .any(|e| e.tag == "ActivityManager" && e.is_high_severity()),
         "ANR should fold as high-severity"
     );
     assert!(
-        events.iter().any(|e| e.tag == "OkHttp" && !e.is_high_severity()),
+        events
+            .iter()
+            .any(|e| e.tag == "OkHttp" && !e.is_high_severity()),
         "ordinary errors remain beside panics"
     );
 
@@ -133,11 +141,10 @@ fn errors_and_panics_folds_stacks_and_keeps_errors() {
     assert!(runtime.samples.len() > 1);
     assert!(cluster_is_high(runtime));
 
-    assert!(
-        snap.clusters
-            .iter()
-            .any(|c| c.tag == "ActivityManager" && c.samples.iter().any(|s| s.contains("ANR")))
-    );
+    assert!(snap
+        .clusters
+        .iter()
+        .any(|c| c.tag == "ActivityManager" && c.samples.iter().any(|s| s.contains("ANR"))));
     assert!(snap.clusters.iter().any(|c| c.tag == "OkHttp"));
     assert!(snap.clusters.iter().any(|c| c.tag == "System"));
 
@@ -166,7 +173,9 @@ fn panics_only_high_severity_clusters() {
         "panics fixture should only keep high-severity E/F events"
     );
     assert!(
-        events.iter().any(|e| e.tag == "AndroidRuntime" && e.samples.len() > 1),
+        events
+            .iter()
+            .any(|e| e.tag == "AndroidRuntime" && e.samples.len() > 1),
         "FATAL stack folds"
     );
     assert!(
@@ -194,7 +203,10 @@ fn panics_only_high_severity_clusters() {
 fn clean_yields_empty_snapshot_and_skips_api() {
     let raw = include_str!("../fixtures/clean.threadtime");
     let parsed: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    assert!(!parsed.is_empty(), "clean fixture still has parseable lines");
+    assert!(
+        !parsed.is_empty(),
+        "clean fixture still has parseable lines"
+    );
     assert!(
         parsed.iter().all(|l| !l.is_error_level()),
         "clean fixture must have no E/F lines"

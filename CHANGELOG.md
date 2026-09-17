@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Community and packaging polish: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY,
+  GitHub Actions CI/release workflows, and issue templates.
+- Deny missing docs on the public API; field-level rustdoc on exported types.
+
 ## [0.1.0] - 2026-09-17
 
 ### Added

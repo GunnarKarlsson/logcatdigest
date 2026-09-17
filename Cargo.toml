@@ -22,6 +22,10 @@ include = [
     "CHANGELOG.md",
 ]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs", "--generate-link-to-definition"]
+
 [dependencies]
 regex = "1"
 serde = { version = "1", features = ["derive"] }

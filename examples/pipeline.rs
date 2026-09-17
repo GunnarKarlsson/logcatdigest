@@ -9,8 +9,8 @@
 //! ```
 
 use logcatdigest::{
-    digest_threadtime, fingerprint, fold_lines_to_events, generate_device_label,
-    parse_threadtime, redact, InsightLine, LogLine, Snapshot, SnapshotOpts,
+    digest_threadtime, fingerprint, fold_lines_to_events, generate_device_label, parse_threadtime,
+    redact, InsightLine, LogLine, Snapshot, SnapshotOpts,
 };
 
 fn main() {
@@ -21,13 +21,22 @@ fn main() {
     };
 
     let scenarios = [
-        ("1) errors only", include_str!("../fixtures/errors.threadtime")),
+        (
+            "1) errors only",
+            include_str!("../fixtures/errors.threadtime"),
+        ),
         (
             "2) errors + panics",
             include_str!("../fixtures/errors_and_panics.threadtime"),
         ),
-        ("3) panics only", include_str!("../fixtures/panics.threadtime")),
-        ("4) clean (no E/F)", include_str!("../fixtures/clean.threadtime")),
+        (
+            "3) panics only",
+            include_str!("../fixtures/panics.threadtime"),
+        ),
+        (
+            "4) clean (no E/F)",
+            include_str!("../fixtures/clean.threadtime"),
+        ),
     ];
 
     let mut previous_key = String::new();
@@ -72,10 +81,7 @@ fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
         .map(|(i, l)| InsightLine::from((i, *l)))
         .collect();
     let events = fold_lines_to_events(&insight);
-    println!(
-        "fold:   {} events (stacks collapsed by PID)",
-        events.len()
-    );
+    println!("fold:   {} events (stacks collapsed by PID)", events.len());
     for ev in &events {
         println!(
             "        - [{}] {} {} high_severity={} samples={}",

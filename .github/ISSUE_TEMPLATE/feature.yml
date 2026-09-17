@@ -1,0 +1,46 @@
+name: Feature
+description: New parse/redaction rule, API, or packaging work
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scope is threadtime → redacted clustered snapshot. This crate does not
+        spawn adb or call LLM HTTP APIs.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you cannot do with the current API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Suggested types/functions, or redaction/fingerprint behavior.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Parse / fold
+        - Redaction / fingerprint
+        - Snapshot / clustering
+        - Packaging / docs / examples
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Tests, MSRV, or dependency impact if you already know them.
+    validations:
+      required: false

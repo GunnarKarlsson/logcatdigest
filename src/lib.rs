@@ -1,8 +1,13 @@
 //! Turn Android logcat into a redacted, clustered snapshot for Chat Completions.
 //!
+//! Crate name: `logcatdigest`. Repository: `logcatdigest`.
+//!
 //! Parse `adb logcat -v threadtime` lines, fold fatal/ANR stacks, redact secrets,
 //! fingerprint noisy messages, and emit a JSON budget suitable as a user message.
-//! This crate does not spawn adb or call any HTTP API.
+//! This crate does not spawn adb or call any HTTP API — you own I/O and the
+//! system prompt.
+//!
+//! See `examples/snapshot.rs` and `examples/pipeline.rs`.
 //!
 //! # Example
 //!
@@ -21,6 +26,9 @@
 //! assert!(!snap.clusters.is_empty());
 //! let _ = snap.to_pretty_json();
 //! ```
+
+#![deny(missing_docs)]
+#![warn(rust_2018_idioms, missing_debug_implementations)]
 
 mod event;
 mod fingerprint;

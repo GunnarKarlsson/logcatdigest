@@ -3,7 +3,9 @@
 [![Crates.io](https://img.shields.io/crates/v/logcatdigest.svg)](https://crates.io/crates/logcatdigest)
 [![Docs.rs](https://docs.rs/logcatdigest/badge.svg)](https://docs.rs/logcatdigest)
 [![MSRV](https://img.shields.io/badge/MSRV-1.80+-blue.svg)](https://blog.rust-lang.org/2024/07/25/Rust-1.80.0/)
+[![Rust](https://img.shields.io/badge/Rust-edition%202021-orange.svg)](https://doc.rust-lang.org/edition-guide/rust-2021/index.html)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/GunnarKarlsson/logcatdigest/actions/workflows/ci.yml/badge.svg)](https://github.com/GunnarKarlsson/logcatdigest/actions)
 
 Turn Android **logcat** into a **redacted, clustered JSON snapshot** ready for a
 Chat Completions `messages[].content` field.
@@ -54,8 +56,11 @@ fn main() {
 }
 ```
 
-```bash
-cargo run --example snapshot
+Runnable examples:
+
+```text
+cargo run --example snapshot   # small inline log → JSON + digest_key
+cargo run --example pipeline   # fixtures → full parse / fold / snapshot path
 ```
 
 ## What it does
@@ -80,6 +85,25 @@ benign IDs. Do not claim PII-safe output.
 | `generate_device_label` | `{model}:{sha256(serial)[..8]}` |
 | `build_snapshot` / `digest_threadtime` | Lines → `Snapshot` |
 | `Snapshot::to_pretty_json` / `digest_key` | LLM payload + change detection |
+
+Full types: [docs.rs/logcatdigest](https://docs.rs/logcatdigest).
+
+## Non-goals
+
+- Spawning `adb` or talking to any LLM HTTP API.
+- Guaranteeing PII-safe or secret-free output (redaction is best-effort).
+- Parsing every historical logcat format — threadtime is the supported input.
+
+## MSRV
+
+Rust **1.80** (edition 2021).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). This project follows the
+[Rust Code of Conduct](CODE_OF_CONDUCT.md).
+
+Security reports: [SECURITY.md](SECURITY.md).
 
 ## License
 
