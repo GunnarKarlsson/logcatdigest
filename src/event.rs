@@ -141,7 +141,7 @@ impl<'a> IntoIterator for &'a GroupedEventList {
 }
 
 /// Returns true when level/message start a multi-line fatal/ANR event.
-pub fn is_stack_head_message(level: char, message: &str) -> bool {
+pub(crate) fn is_stack_head_message(level: char, message: &str) -> bool {
     if level == 'F' {
         return true;
     }

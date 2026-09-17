@@ -128,7 +128,7 @@ impl From<String> for DeviceModel {
 }
 
 /// Hex fingerprint of length 16 from tag + noise-stripped message.
-pub fn fingerprint(tag: &str, message: &str) -> String {
+pub(crate) fn fingerprint(tag: &str, message: &str) -> String {
     let collapsed = NOISE_RE.replace_all(message, "#");
     let mut hasher = Sha256::new();
     hasher.update(tag.as_bytes());
@@ -137,18 +137,12 @@ pub fn fingerprint(tag: &str, message: &str) -> String {
     format!("{:x}", hasher.finalize())[..FINGERPRINT_HEX_LEN].to_string()
 }
 
-/// Alias for [`fingerprint`] (dashboard / older call sites).
-#[inline]
-pub fn generate_fingerprint(tag: &str, message: &str) -> String {
-    fingerprint(tag, message)
-}
-
 /// Best-effort redaction of secrets and real-world identifiers.
 ///
 /// Replaces MACs, Bearer tokens, JWT-like blobs, emails, `password=`/`token=`/
 /// `api_key=`/`authorization:` assignments, IPv4 addresses, and 10–15 digit runs.
 /// Leaves paths and short numbers unchanged. Not a guarantee of PII safety.
-pub fn redact(message: &str) -> String {
+pub(crate) fn redact(message: &str) -> String {
     SECRET_RE.replace_all(message, "#").into_owned()
 }
 

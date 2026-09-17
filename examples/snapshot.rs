@@ -1,4 +1,10 @@
-use logcatdigest::{parse_threadtime, Snapshot, SnapshotOpts};
+//! Small inline log → fully configured `SnapshotOpts` → JSON snapshot.
+//!
+//! ```bash
+//! cargo run --example snapshot
+//! ```
+
+use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
 
 fn main() {
     let raw = r#"
@@ -8,15 +14,22 @@ fn main() {
 09-17 12:01:04.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo token=sk-secret
 "#;
 
-    let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    let snap = Snapshot::from_lines(
-        &lines,
-        SnapshotOpts::builder()
-            .label(("Pixel 8", "emulator-5554"))
-            .model("Pixel 8")
-            .build(),
-    );
+    let opts = SnapshotOpts::builder()
+        .device_label(("Pixel 8", "emulator-5554"))
+        .device_model("Pixel 8")
+        .content_types([ContentType::Fatal, ContentType::Anr, ContentType::Crash])
+        .levels([LogLevel::Error, LogLevel::Fatal])
+        .tags(["AndroidRuntime", "OkHttp"])
+        .contains("Exception")
+        .max_clusters(8)
+        .build();
 
+    let snap = Snapshot::from_logcat_lines(raw.lines(), opts);
+
+    if snap.is_empty() {
+        println!("nothing matched");
+        return;
+    }
     println!("{}", snap.to_pretty_json());
     println!("digest_key={}", snap.digest_key());
 }

@@ -1,17 +1,17 @@
-use logcatdigest::{parse_threadtime, Snapshot, SnapshotOpts};
+use logcatdigest::{Snapshot, SnapshotOpts};
 
 #[test]
 fn fixture_crash_anr_snapshot() {
     let raw = include_str!("../fixtures/crash_anr.threadtime");
-    let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    let snap = Snapshot::from_lines(
-        &lines,
+    let snap = Snapshot::from_logcat_lines(
+        raw.lines(),
         SnapshotOpts::builder()
-            .label(("Pixel 8", "emulator-5554"))
-            .model("Pixel 8")
+            .device_label(("Pixel 8", "emulator-5554"))
+            .device_model("Pixel 8")
             .build(),
     );
 
+    assert!(!snap.is_empty());
     assert!(
         snap.clusters
             .iter()
@@ -50,7 +50,7 @@ fn fixture_crash_anr_snapshot() {
 
     assert!(
         !snap.clusters.iter().any(|c| c.tag == "chatty"),
-        "info lines excluded when errors_only"
+        "info lines excluded under default Error+Fatal levels"
     );
     assert!(snap.clusters.len() <= 8);
     assert!(!snap.digest_key().is_empty());

@@ -42,7 +42,7 @@ impl LogLine {
 /// Parse a single `adb logcat -v threadtime` line.
 ///
 /// Returns `None` for headers and other non-matching input.
-pub fn parse_threadtime(line: &str) -> Option<LogLine> {
+pub(crate) fn parse_threadtime(line: &str) -> Option<LogLine> {
     let captures = LINE.captures(line.trim_end())?;
     let pid = captures.get(2)?.as_str().parse().ok()?;
     let tid = captures.get(3)?.as_str().parse().ok()?;

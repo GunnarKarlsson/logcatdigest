@@ -27,10 +27,11 @@ You cannot usefully stream raw logcat into a Chat Completions API:
 
 ## Solution
 
-Filter to errors, group stacks (redacting sample lines), fingerprint noisy text so
-identical bugs hash the same, and consolidate matching errors into a small JSON
-**snapshot** (≤8 clusters, ~6 KB). Use `digest_key()` to call the model only when
-the mix changes.
+Filter raw logcat lines (levels, content types, tags, substring), group stacks
+while redacting sample lines, fingerprint noisy text so identical bugs hash the
+same, and consolidate matching errors into a small JSON **snapshot** (≤8
+clusters, ~6 KB). Skip the model when `is_empty()`; use `digest_key()` to call
+only when the mix changes.
 
 No adb child process. No HTTP client. You own I/O and the system prompt.
 
@@ -47,12 +48,8 @@ logcatdigest = "0.1"
 
 ## Quick start
 
-One path: parse → filter → group (redact) → fingerprint/cluster → gate the API call.
-
 ```rust
-use logcatdigest::{
-    parse_threadtime, GroupedEventList, IndexedLogLine, Snapshot, SnapshotOpts,
-};
+use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
 
 fn main() {
     let raw = r#"
@@ -64,32 +61,24 @@ fn main() {
 "#;
 
     let opts = SnapshotOpts::builder()
-        .label(("Pixel 8", "emulator-5554"))
-        .model("Pixel 8")
+        .device_label(("Pixel 8", "emulator-5554"))
+        .device_model("Pixel 8")
+        .content_types([ContentType::Fatal, ContentType::Anr, ContentType::Crash])
+        .levels([LogLevel::Error, LogLevel::Fatal])
+        .tags(["AndroidRuntime", "OkHttp"])
+        .contains("Exception")
+        .max_clusters(8)
         .build();
 
-    // 1. Parse threadtime logcat
-    let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
+    let snap = Snapshot::from_logcat_lines(raw.lines(), opts);
+    if snap.is_empty() {
+        return; // nothing matched — skip the model call
+    }
 
-    // 2. Filter to E/F, then group stacks (sample lines are redacted on each event)
-    let indexed: Vec<_> = lines
-        .iter()
-        .enumerate()
-        .filter(|(_, l)| !opts.errors_only || l.is_error_level())
-        .map(|(i, l)| IndexedLogLine::from((i, l)))
-        .collect();
-    let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
-
-    // 3. Fingerprint + consolidate identical errors → Chat Completions snapshot
-    let snap = Snapshot::from_events(&events, opts);
     let json = snap.to_pretty_json();
     let key = snap.digest_key();
-
-    // 4. Gate the API: skip empty digests; re-query only when the mix changes
     let previous_key = ""; // last key you persisted from a prior poll
-    if !snap.clusters.is_empty()
-        && (key != previous_key || snap.has_new_high_severity(previous_key))
-    {
+    if key != previous_key || snap.has_new_high_severity(previous_key) {
         // POST `json` as messages[].content — keep the system prompt in your app
         println!("{json}");
         println!("digest_key={key}");
@@ -100,16 +89,16 @@ fn main() {
 Runnable examples:
 
 ```text
-cargo run --example pipeline   # fixtures → composed parse/group/snapshot path
-cargo run --example snapshot   # small inline log → Snapshot::from_lines
+cargo run --example pipeline   # fixtures → Snapshot → API gate
+cargo run --example snapshot   # small inline log → Snapshot::from_logcat_lines
 ```
 
 ## What it does
 
-1. **Parse** `adb logcat -v threadtime` → `LogLine` (no UI wrapping).
-2. **Filter** to `E`/`F` when `errors_only` (default).
-3. **Group** multi-line fatal/ANR stacks by PID → `GroupedEvent`; **redact** secrets
-   into samples.
+1. **Parse** `adb logcat -v threadtime` lines (headers and non-matches dropped).
+2. **Filter** by level (default `E`/`F`), then by content type / tag / substring
+   after stack grouping.
+3. **Group** multi-line fatal/ANR stacks by PID; **redact** secrets into samples.
 4. **Fingerprint** after collapsing hex, paths, and numbers so the same bug
    hashes the same across runs.
 5. **Cluster** (≤8), pin up to 2 high-severity shapes, trim to ~6 KB JSON.
@@ -121,16 +110,13 @@ benign IDs. Do not claim PII-safe output.
 
 | Item | Role |
 |---|---|
-| `parse_threadtime` / `LogLine` | Parse one threadtime line |
-| `IndexedLogLine` | `LogLine` + order index |
-| `GroupedEventList::group_from_indexed_log_lines` | Group stacks; redact samples |
-| `GroupedEvent` / `GroupedEventList` | One error or stack; list of them |
-| `SnapshotOpts::builder` | Typestate builder for device label/model |
-| `Snapshot::from_lines` | Parsed `LogLine`s → `Snapshot` |
-| `Snapshot::from_events` | Fingerprint + cluster events → `Snapshot` |
+| `SnapshotOpts::builder` | Optional device fields + filters |
+| `ContentType` | `Fatal` / `Anr` / `Crash` (empty = all) |
+| `LogLevel` | Priority filter (default Error + Fatal) |
+| `Snapshot::from_logcat_lines` | Raw threadtime lines → `Snapshot` |
+| `Snapshot::is_empty` | Skip the model when nothing matched |
 | `DeviceLabel` / `DeviceModel` | Typed device id and model on snapshots |
 | `Snapshot::to_pretty_json` / `digest_key` | LLM payload + change detection |
-| `redact` / `fingerprint` | Also available for custom pipelines |
 
 Full types: [docs.rs/logcatdigest](https://docs.rs/logcatdigest).
 

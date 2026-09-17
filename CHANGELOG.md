@@ -2,29 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Added
 
-- `SnapshotOpts::builder` typestate API (required label/model; optional
-  errors_only / max_clusters).
-- `Snapshot::from_lines` / `from_events` as the digest entry points.
-- `DeviceLabel` / `DeviceModel` newtypes (`DeviceLabel::new`,
-  `From<(&str, &str)>`, `DeviceModel::new` / `From<&str>`).
-- Rename pipeline types: `IndexedLogLine` / `GroupedEvent` /
-  `GroupedEventList::group_from_indexed_log_lines` (was Insight* / fold_*).
+- `ContentType` (`Fatal` / `Anr` / `Crash`) and `LogLevel` filter enums.
+- `SnapshotOpts` optional filters: `content_types`, `levels`, `tags`, `contains`.
+- `Snapshot::from_logcat_lines` accepts raw threadtime strings; `Snapshot::is_empty`.
+- Optional `device_label` / `device_model` on the builder (empty when omitted).
 - Community and packaging polish: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY,
   GitHub Actions CI/release workflows, and issue templates.
 - Deny missing docs on the public API; field-level rustdoc on exported types.
 
 ### Changed
 
-- README and examples show the composed digest path end-to-end.
-- Removed free helpers `digest_threadtime`, `build_snapshot`,
-  `build_snapshot_from_events`, and `generate_device_label`.
+- Public mental model is filters → `Snapshot` → skip if empty; pipeline internals
+  (`IndexedLogLine`, `GroupedEvent`, parse/redact/fingerprint helpers) are crate-private.
+- Default levels are Error + Fatal (replaces `errors_only`).
+- Builder methods renamed: `.device_label` / `.device_model` (no typestate).
+
+### Removed
+
+- Public exports of parse/group/fingerprint helpers and `Snapshot::from_events`.
+- Free helpers `digest_threadtime`, `build_snapshot`, `generate_device_label`.
 
 ## [0.1.0] - 2026-09-17
 

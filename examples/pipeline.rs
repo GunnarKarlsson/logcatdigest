@@ -1,20 +1,25 @@
 //! End-to-end digest: raw threadtime logcat → Chat Completions payload.
 //!
-//! One linear path: parse → filter → group (redact) → fingerprint/cluster →
-//! gate the model call. Fixtures in `fixtures/` (shared with `tests/pipeline.rs`).
+//! One path: filter → Snapshot → gate the model call.
+//! Fixtures in `fixtures/` (shared with `tests/pipeline.rs`).
 //!
 //! ```bash
 //! cargo run --example pipeline
 //! ```
 
-use logcatdigest::{
-    parse_threadtime, GroupedEventList, IndexedLogLine, LogLine, Snapshot, SnapshotOpts,
-};
+use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
 
 fn main() {
+    // Every builder method listed. Empty content_types / tags = no extra filter;
+    // empty contains matches all text (omit `.contains` when unused).
     let opts = SnapshotOpts::builder()
-        .label(("Pixel 8", "emulator-5554"))
-        .model("Pixel 8")
+        .device_label(("Pixel 8", "emulator-5554"))
+        .device_model("Pixel 8")
+        .content_types(Vec::<ContentType>::new())
+        .levels([LogLevel::Error, LogLevel::Fatal])
+        .tags(Vec::<String>::new())
+        .contains("")
+        .max_clusters(8)
         .build();
 
     let scenarios = [
@@ -42,79 +47,33 @@ fn main() {
         println!("{name}");
         println!("{}\n", "=".repeat(72));
 
-        let snap = run_pipeline(raw, opts.clone());
+        let snap = Snapshot::from_logcat_lines(raw.lines(), opts.clone());
+        println!(
+            "snap:   {} cluster(s) empty={} digest_key={:?}",
+            snap.clusters.len(),
+            snap.is_empty(),
+            snap.digest_key()
+        );
+        for c in &snap.clusters {
+            println!(
+                "        - [{}] {} count={} fp={} sample={}",
+                c.level,
+                c.tag,
+                c.count,
+                &c.fingerprint[..8.min(c.fingerprint.len())],
+                truncate(c.samples.first().map(String::as_str).unwrap_or(""), 48)
+            );
+        }
+
         let should_call = decide_whether_to_call_api(&snap, &previous_key);
         print_api_ready(&snap, &previous_key, should_call);
-
         previous_key = snap.digest_key();
     }
 }
 
-/// Parse → filter → group (redact samples) → fingerprint/cluster → Snapshot.
-fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
-    // 1. Parse threadtime (UI wrapping / non-matching lines dropped)
-    let parsed: Vec<LogLine> = raw.lines().filter_map(parse_threadtime).collect();
-    let dropped = raw.lines().filter(|l| !l.trim().is_empty()).count() - parsed.len();
-    println!(
-        "parse:  {} threadtime lines ({} non-matching dropped)",
-        parsed.len(),
-        dropped
-    );
-
-    // 2. Filter to E/F when errors_only (default)
-    let indexed: Vec<IndexedLogLine> = parsed
-        .iter()
-        .enumerate()
-        .filter(|(_, l)| !opts.errors_only || l.is_error_level())
-        .map(|(i, l)| IndexedLogLine::from((i, l)))
-        .collect();
-    println!(
-        "filter: {} kept for digest (errors_only={})",
-        indexed.len(),
-        opts.errors_only
-    );
-
-    // 3. Group fatal/ANR stacks; sample lines are redacted here
-    let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
-    println!(
-        "group:  {} events (stacks collapsed; samples redacted)",
-        events.len()
-    );
-    for ev in &events {
-        let sample = ev.samples.first().map(String::as_str).unwrap_or("");
-        println!(
-            "        - [{}] {} high_severity={} sample={}",
-            ev.level,
-            ev.tag,
-            ev.is_high_severity(),
-            truncate(sample, 56)
-        );
-    }
-
-    // 4. Fingerprint identical bugs and consolidate into a budgeted snapshot
-    let snap = Snapshot::from_events(&events, opts);
-    println!(
-        "snap:   {} cluster(s) digest_key={:?}",
-        snap.clusters.len(),
-        snap.digest_key()
-    );
-    for c in &snap.clusters {
-        println!(
-            "        - [{}] {} count={} fp={} sample={}",
-            c.level,
-            c.tag,
-            c.count,
-            &c.fingerprint[..8.min(c.fingerprint.len())],
-            truncate(c.samples.first().map(String::as_str).unwrap_or(""), 48)
-        );
-    }
-
-    snap
-}
-
 /// Gate the AI call: skip empty digests; re-query when the mix or a new fatal shape appears.
 fn decide_whether_to_call_api(snap: &Snapshot, previous_key: &str) -> bool {
-    if snap.clusters.is_empty() {
+    if snap.is_empty() {
         return false;
     }
     let key = snap.digest_key();
@@ -124,8 +83,8 @@ fn decide_whether_to_call_api(snap: &Snapshot, previous_key: &str) -> bool {
 fn print_api_ready(snap: &Snapshot, previous_key: &str, should_call: bool) {
     println!();
     println!("--- Chat Completions user message (to_pretty_json) ---");
-    if snap.clusters.is_empty() {
-        println!("(empty snapshot — nothing to send; log was clean under errors_only)");
+    if snap.is_empty() {
+        println!("(empty snapshot — nothing to send; nothing matched the filters)");
     } else {
         println!("{}", snap.to_pretty_json());
     }

@@ -3,40 +3,28 @@
 //!
 //! Shared logcat fixtures: `fixtures/*.threadtime`.
 
-use logcatdigest::{
-    is_high_severity, parse_threadtime, GroupedEventList, IndexedLogLine, Snapshot, SnapshotOpts,
-};
+use logcatdigest::{Cluster, ContentType, Snapshot, SnapshotOpts};
 
 fn opts() -> SnapshotOpts {
     SnapshotOpts::builder()
-        .label(("Pixel 8", "emulator-5554"))
-        .model("Pixel 8")
+        .device_label(("Pixel 8", "emulator-5554"))
+        .device_model("Pixel 8")
         .build()
 }
 
 fn digest(raw: &str) -> Snapshot {
-    let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    Snapshot::from_lines(&lines, opts())
+    Snapshot::from_logcat_lines(raw.lines(), opts())
 }
 
-fn group_error_events(raw: &str) -> GroupedEventList {
-    let parsed: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    let indexed: Vec<IndexedLogLine> = parsed
-        .iter()
-        .filter(|l| l.is_error_level())
-        .enumerate()
-        .map(|(i, l)| IndexedLogLine::from((i, l)))
-        .collect();
-    GroupedEventList::group_from_indexed_log_lines(&indexed)
-}
-
-fn cluster_is_high(c: &logcatdigest::Cluster) -> bool {
+fn cluster_is_high(c: &Cluster) -> bool {
     let sample = c.samples.first().map(String::as_str).unwrap_or("");
-    is_high_severity(c.level, &c.tag, sample)
+    ContentType::Fatal.matches(c.level, &c.tag, sample)
+        || ContentType::Anr.matches(c.level, &c.tag, sample)
+        || ContentType::Crash.matches(c.level, &c.tag, sample)
 }
 
 fn should_call_api(snap: &Snapshot, previous_key: &str) -> bool {
-    if snap.clusters.is_empty() {
+    if snap.is_empty() {
         return false;
     }
     let key = snap.digest_key();
@@ -47,7 +35,7 @@ fn assert_noise_excluded(snap: &Snapshot) {
     for tag in ["chatty", "OpenGLRenderer", "TrafficStats", "Zygote", "art"] {
         assert!(
             !snap.clusters.iter().any(|c| c.tag == tag),
-            "{tag} noise must be excluded when errors_only"
+            "{tag} noise must be excluded under default Error+Fatal levels"
         );
     }
 }
@@ -63,13 +51,8 @@ fn assert_api_payload(snap: &Snapshot) {
 #[test]
 fn errors_only_clusters_ordinary_failures() {
     let raw = include_str!("../fixtures/errors.threadtime");
-    let events = group_error_events(raw);
-    assert!(
-        events.iter().all(|e| !e.is_high_severity()),
-        "errors fixture must not contain FATAL/ANR/panic shapes"
-    );
-
     let snap = digest(raw);
+    assert!(!snap.is_empty());
     assert_noise_excluded(&snap);
 
     let okhttp_total: u32 = snap
@@ -109,26 +92,6 @@ fn errors_only_clusters_ordinary_failures() {
 #[test]
 fn errors_and_panics_folds_stacks_and_keeps_errors() {
     let raw = include_str!("../fixtures/errors_and_panics.threadtime");
-    let events = group_error_events(raw);
-    assert!(
-        events
-            .iter()
-            .any(|e| e.tag == "AndroidRuntime" && e.samples.len() > 1),
-        "FATAL stack should fold to one multi-sample event"
-    );
-    assert!(
-        events
-            .iter()
-            .any(|e| e.tag == "ActivityManager" && e.is_high_severity()),
-        "ANR should fold as high-severity"
-    );
-    assert!(
-        events
-            .iter()
-            .any(|e| e.tag == "OkHttp" && !e.is_high_severity()),
-        "ordinary errors remain beside panics"
-    );
-
     let snap = digest(raw);
     assert_noise_excluded(&snap);
 
@@ -166,34 +129,30 @@ fn errors_and_panics_folds_stacks_and_keeps_errors() {
 #[test]
 fn panics_only_high_severity_clusters() {
     let raw = include_str!("../fixtures/panics.threadtime");
-    let events = group_error_events(raw);
-    assert!(
-        !events.is_empty() && events.iter().all(|e| e.is_high_severity()),
-        "panics fixture should only keep high-severity E/F events"
-    );
-    assert!(
-        events
-            .iter()
-            .any(|e| e.tag == "AndroidRuntime" && e.samples.len() > 1),
-        "FATAL stack folds"
-    );
-    assert!(
-        events.iter().any(|e| e.tag == "DEBUG" && e.level == 'F'),
-        "native Fatal signal kept"
-    );
-    assert!(
-        events.iter().any(|e| e.tag == "ActivityManager"),
-        "ANR kept"
-    );
-
     let snap = digest(raw);
     assert_noise_excluded(&snap);
-    assert!(!snap.clusters.is_empty());
+    assert!(!snap.is_empty());
     assert!(
         snap.clusters.iter().all(cluster_is_high),
         "every cluster should be high-severity"
     );
     assert!(!snap.clusters.iter().any(|c| c.tag == "OkHttp"));
+    assert!(
+        snap.clusters
+            .iter()
+            .any(|c| c.tag == "AndroidRuntime" && c.samples.len() > 1),
+        "FATAL stack folds"
+    );
+    assert!(
+        snap.clusters
+            .iter()
+            .any(|c| c.tag == "DEBUG" && c.level == 'F'),
+        "native Fatal signal kept"
+    );
+    assert!(
+        snap.clusters.iter().any(|c| c.tag == "ActivityManager"),
+        "ANR kept"
+    );
     assert_api_payload(&snap);
     assert!(snap.has_new_high_severity(""));
 }
@@ -201,18 +160,13 @@ fn panics_only_high_severity_clusters() {
 #[test]
 fn clean_yields_empty_snapshot_and_skips_api() {
     let raw = include_str!("../fixtures/clean.threadtime");
-    let parsed: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
     assert!(
-        !parsed.is_empty(),
-        "clean fixture still has parseable lines"
-    );
-    assert!(
-        parsed.iter().all(|l| !l.is_error_level()),
-        "clean fixture must have no E/F lines"
+        raw.lines().any(|l| l.contains(" I ") || l.contains(" D ")),
+        "clean fixture should include non-error log lines"
     );
 
     let snap = digest(raw);
-    assert!(snap.clusters.is_empty());
+    assert!(snap.is_empty());
     assert_eq!(snap.digest_key(), "");
     assert_eq!(snap.levels, ["E", "F"]);
     assert!(!should_call_api(&snap, ""));
@@ -220,6 +174,22 @@ fn clean_yields_empty_snapshot_and_skips_api() {
 
     let json = snap.to_pretty_json();
     assert!(json.contains("\"clusters\": []"));
+}
+
+#[test]
+fn content_type_filter_anr_only() {
+    let raw = include_str!("../fixtures/errors_and_panics.threadtime");
+    let snap = Snapshot::from_logcat_lines(
+        raw.lines(),
+        SnapshotOpts::builder()
+            .device_label(("Pixel 8", "emulator-5554"))
+            .device_model("Pixel 8")
+            .content_types([ContentType::Anr])
+            .build(),
+    );
+    assert!(!snap.is_empty());
+    assert!(snap.clusters.iter().all(|c| c.tag == "ActivityManager"));
+    assert!(!snap.clusters.iter().any(|c| c.tag == "OkHttp"));
 }
 
 #[test]

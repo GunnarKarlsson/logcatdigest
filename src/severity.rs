@@ -1,27 +1,14 @@
 //! High-severity heuristics for fatal / ANR / native-crash shaped lines.
 
+use crate::content::ContentType;
+
 /// Returns true for fatal, ANR, panic, or native-crash shaped logcat lines.
 ///
-/// Matches Fatal level; tags `AndroidRuntime`, `DEBUG`, or `libc`; or message substrings
-/// `FATAL EXCEPTION`, `ANR in`, `Fatal signal`, `tombstone`, `CheckJNI`, or `panic`
-/// (ASCII case-insensitive).
-pub fn is_high_severity(level: char, tag: &str, message: &str) -> bool {
-    if level == 'F' {
-        return true;
-    }
-    if matches!(tag, "AndroidRuntime" | "DEBUG" | "libc") {
-        return true;
-    }
-    let message = message.to_ascii_lowercase();
-    const NEEDLES: &[&str] = &[
-        "fatal exception",
-        "anr in",
-        "fatal signal",
-        "tombstone",
-        "checkjni",
-        "panic",
-    ];
-    NEEDLES.iter().any(|needle| message.contains(needle))
+/// Equivalent to matching any [`ContentType`].
+pub(crate) fn is_high_severity(level: char, tag: &str, message: &str) -> bool {
+    ContentType::Fatal.matches(level, tag, message)
+        || ContentType::Anr.matches(level, tag, message)
+        || ContentType::Crash.matches(level, tag, message)
 }
 
 #[cfg(test)]

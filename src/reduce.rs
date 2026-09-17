@@ -13,7 +13,7 @@ pub(crate) const MAX_HIGH_PIN: usize = 2;
 pub(crate) const MAX_JSON_BYTES: usize = 6 * 1024;
 
 /// Absorb events into fingerprint clusters.
-pub fn absorb(events: &[GroupedEvent]) -> Vec<Cluster> {
+pub(crate) fn absorb(events: &[GroupedEvent]) -> Vec<Cluster> {
     let mut map: HashMap<String, Cluster> = HashMap::new();
     for event in events {
         let fp = fingerprint(&event.tag, &event.headline);
@@ -40,7 +40,7 @@ pub fn absorb(events: &[GroupedEvent]) -> Vec<Cluster> {
 }
 
 /// Sort by count; pin up to [`MAX_HIGH_PIN`] high-severity clusters, then fill by count.
-pub fn retain_clusters(clusters: &mut Vec<Cluster>, max: usize) {
+pub(crate) fn retain_clusters(clusters: &mut Vec<Cluster>, max: usize) {
     clusters.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.tag.cmp(&b.tag)));
     let mut high = Vec::new();
     let mut rest = Vec::new();
@@ -58,7 +58,7 @@ pub fn retain_clusters(clusters: &mut Vec<Cluster>, max: usize) {
 }
 
 /// Drop lowest-priority clusters until compact JSON fits under [`MAX_JSON_BYTES`].
-pub fn trim_to_json_budget(clusters: &mut Vec<Cluster>) {
+pub(crate) fn trim_to_json_budget(clusters: &mut Vec<Cluster>) {
     while clusters.len() > 1 {
         let Ok(json) = serde_json::to_string(&ClustersLite { clusters }) else {
             break;

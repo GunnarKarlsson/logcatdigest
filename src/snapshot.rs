@@ -1,37 +1,80 @@
-//! Build a serializable LLM-ready snapshot from parsed log lines.
+//! Build a serializable LLM-ready snapshot from raw logcat lines.
 
 use serde::Serialize;
 
-use crate::event::{GroupedEventList, IndexedLogLine};
+use crate::content::{ContentType, LogLevel};
+use crate::event::{GroupedEvent, GroupedEventList, IndexedLogLine};
 use crate::fingerprint::{DeviceLabel, DeviceModel};
-use crate::parse::LogLine;
+use crate::parse::{parse_threadtime, LogLine};
 use crate::reduce::{absorb, retain_clusters, trim_to_json_budget};
 
 const DIGEST_COUNT_BUCKET: u32 = 5;
 const DEFAULT_MAX_CLUSTERS: usize = 8;
 
-/// Options for [`Snapshot::from_lines`] / [`Snapshot::from_events`].
+fn default_levels() -> Vec<LogLevel> {
+    vec![LogLevel::Error, LogLevel::Fatal]
+}
+
+/// Options for [`Snapshot::from_logcat_lines`].
 #[derive(Debug, Clone)]
 pub struct SnapshotOpts {
-    /// Non-reversible device id from [`DeviceLabel::new`].
+    /// Non-reversible device id; empty when unset.
     pub device_label: DeviceLabel,
-    /// Human-readable model stored on the snapshot.
+    /// Human-readable model; empty when unset.
     pub device_model: DeviceModel,
-    /// When true, only Error and Fatal lines are included.
-    pub errors_only: bool,
+    /// Content shapes to keep; empty means all types.
+    pub content_types: Vec<ContentType>,
+    /// Priority levels to keep; default Error + Fatal.
+    pub levels: Vec<LogLevel>,
+    /// Tag allow-list; empty means all tags.
+    pub tags: Vec<String>,
+    /// Optional substring that must appear in the event text.
+    pub contains: Option<String>,
     /// Soft cap on retained clusters (high-severity shapes are pinned first).
     pub max_clusters: usize,
 }
 
 impl SnapshotOpts {
-    /// Start a typestate builder; [`SnapshotOptsBuilder::build`] requires label and model.
-    pub fn builder() -> SnapshotOptsBuilder<(), ()> {
-        SnapshotOptsBuilder {
-            label: (),
-            model: (),
-            errors_only: true,
-            max_clusters: DEFAULT_MAX_CLUSTERS,
+    /// Start an optional-field builder. [`SnapshotOptsBuilder::build`] always succeeds.
+    pub fn builder() -> SnapshotOptsBuilder {
+        SnapshotOptsBuilder::default()
+    }
+
+    fn allows_level(&self, level: char) -> bool {
+        self.levels.iter().any(|allowed| allowed.as_char() == level)
+    }
+
+    fn allows_event(&self, event: &GroupedEvent) -> bool {
+        if !self.allows_level(event.level) {
+            return false;
         }
+        if !self.tags.is_empty() && !self.tags.iter().any(|t| t == &event.tag) {
+            return false;
+        }
+        let blob = event_text(event);
+        if let Some(needle) = &self.contains {
+            if !blob.contains(needle.as_str()) {
+                return false;
+            }
+        }
+        if self.content_types.is_empty() {
+            return true;
+        }
+        self.content_types
+            .iter()
+            .any(|ct| ct.matches(event.level, &event.tag, &blob))
+    }
+
+    fn level_labels(&self) -> Vec<&'static str> {
+        self.levels.iter().map(|l| l.as_str()).collect()
+    }
+}
+
+fn event_text(event: &GroupedEvent) -> String {
+    if event.samples.is_empty() {
+        event.headline.clone()
+    } else {
+        event.samples.join("\n")
     }
 }
 
@@ -40,25 +83,75 @@ impl Default for SnapshotOpts {
         Self {
             device_label: DeviceLabel::default(),
             device_model: DeviceModel::default(),
-            errors_only: true,
+            content_types: Vec::new(),
+            levels: default_levels(),
+            tags: Vec::new(),
+            contains: None,
             max_clusters: DEFAULT_MAX_CLUSTERS,
         }
     }
 }
 
-/// Typestate builder for [`SnapshotOpts`]. Missing label or model is a compile error.
+/// Builder for [`SnapshotOpts`]. Every field is optional.
 #[derive(Debug, Clone)]
-pub struct SnapshotOptsBuilder<L, M> {
-    label: L,
-    model: M,
-    errors_only: bool,
+pub struct SnapshotOptsBuilder {
+    device_label: DeviceLabel,
+    device_model: DeviceModel,
+    content_types: Vec<ContentType>,
+    levels: Option<Vec<LogLevel>>,
+    tags: Vec<String>,
+    contains: Option<String>,
     max_clusters: usize,
 }
 
-impl<L, M> SnapshotOptsBuilder<L, M> {
-    /// Include only Error/Fatal lines when `true` (the default).
-    pub fn errors_only(mut self, errors_only: bool) -> Self {
-        self.errors_only = errors_only;
+impl Default for SnapshotOptsBuilder {
+    fn default() -> Self {
+        Self {
+            device_label: DeviceLabel::default(),
+            device_model: DeviceModel::default(),
+            content_types: Vec::new(),
+            levels: None,
+            tags: Vec::new(),
+            contains: None,
+            max_clusters: DEFAULT_MAX_CLUSTERS,
+        }
+    }
+}
+
+impl SnapshotOptsBuilder {
+    /// Set the device label (`DeviceLabel` or `(model, serial)`).
+    pub fn device_label(mut self, label: impl Into<DeviceLabel>) -> Self {
+        self.device_label = label.into();
+        self
+    }
+
+    /// Set the device model (`DeviceModel` or `&str` / `String`).
+    pub fn device_model(mut self, model: impl Into<DeviceModel>) -> Self {
+        self.device_model = model.into();
+        self
+    }
+
+    /// Keep only these content types (OR). Empty / unset means all types.
+    pub fn content_types(mut self, types: impl IntoIterator<Item = ContentType>) -> Self {
+        self.content_types = types.into_iter().collect();
+        self
+    }
+
+    /// Keep only these priority levels (OR). Default is Error + Fatal.
+    pub fn levels(mut self, levels: impl IntoIterator<Item = LogLevel>) -> Self {
+        self.levels = Some(levels.into_iter().collect());
+        self
+    }
+
+    /// Keep only these tags (OR). Empty means all tags.
+    pub fn tags(mut self, tags: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.tags = tags.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Require this substring in the grouped event text (case-sensitive).
+    pub fn contains(mut self, needle: impl Into<String>) -> Self {
+        self.contains = Some(needle.into());
         self
     }
 
@@ -67,67 +160,16 @@ impl<L, M> SnapshotOptsBuilder<L, M> {
         self.max_clusters = max_clusters;
         self
     }
-}
 
-impl SnapshotOptsBuilder<(), ()> {
-    /// Set the device label (`DeviceLabel` or `(model, serial)`).
-    pub fn label(self, label: impl Into<DeviceLabel>) -> SnapshotOptsBuilder<DeviceLabel, ()> {
-        SnapshotOptsBuilder {
-            label: label.into(),
-            model: self.model,
-            errors_only: self.errors_only,
-            max_clusters: self.max_clusters,
-        }
-    }
-
-    /// Set the device model (`DeviceModel` or `&str` / `String`).
-    pub fn model(self, model: impl Into<DeviceModel>) -> SnapshotOptsBuilder<(), DeviceModel> {
-        SnapshotOptsBuilder {
-            label: self.label,
-            model: model.into(),
-            errors_only: self.errors_only,
-            max_clusters: self.max_clusters,
-        }
-    }
-}
-
-impl SnapshotOptsBuilder<DeviceLabel, ()> {
-    /// Set the device model (`DeviceModel` or `&str` / `String`).
-    pub fn model(
-        self,
-        model: impl Into<DeviceModel>,
-    ) -> SnapshotOptsBuilder<DeviceLabel, DeviceModel> {
-        SnapshotOptsBuilder {
-            label: self.label,
-            model: model.into(),
-            errors_only: self.errors_only,
-            max_clusters: self.max_clusters,
-        }
-    }
-}
-
-impl SnapshotOptsBuilder<(), DeviceModel> {
-    /// Set the device label (`DeviceLabel` or `(model, serial)`).
-    pub fn label(
-        self,
-        label: impl Into<DeviceLabel>,
-    ) -> SnapshotOptsBuilder<DeviceLabel, DeviceModel> {
-        SnapshotOptsBuilder {
-            label: label.into(),
-            model: self.model,
-            errors_only: self.errors_only,
-            max_clusters: self.max_clusters,
-        }
-    }
-}
-
-impl SnapshotOptsBuilder<DeviceLabel, DeviceModel> {
     /// Finish the builder into [`SnapshotOpts`].
     pub fn build(self) -> SnapshotOpts {
         SnapshotOpts {
-            device_label: self.label,
-            device_model: self.model,
-            errors_only: self.errors_only,
+            device_label: self.device_label,
+            device_model: self.device_model,
+            content_types: self.content_types,
+            levels: self.levels.unwrap_or_else(default_levels),
+            tags: self.tags,
+            contains: self.contains,
             max_clusters: self.max_clusters,
         }
     }
@@ -151,50 +193,62 @@ pub struct Cluster {
 /// Reduced digest of log lines for one device.
 #[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
-    /// Non-reversible device label.
+    /// Non-reversible device label (may be empty).
     pub device_label: DeviceLabel,
-    /// Human-readable device model.
+    /// Human-readable device model (may be empty).
     pub device_model: DeviceModel,
-    /// Priority letters included in this digest (`E`/`F` when errors-only).
+    /// Priority letters selected by the filter.
     pub levels: Vec<&'static str>,
     /// Budgeted clusters, high-severity shapes first when pinned.
     pub clusters: Vec<Cluster>,
 }
 
 impl Snapshot {
-    /// Filter, group (redact), fingerprint, and cluster already-parsed log lines.
-    pub fn from_lines(lines: &[LogLine], opts: SnapshotOpts) -> Self {
+    /// Parse raw logcat threadtime lines, apply filters, and build a snapshot.
+    ///
+    /// Non-matching lines are dropped. Empty result means nothing matched the filters.
+    pub fn from_logcat_lines(
+        lines: impl IntoIterator<Item = impl AsRef<str>>,
+        opts: SnapshotOpts,
+    ) -> Self {
+        let parsed: Vec<LogLine> = lines
+            .into_iter()
+            .filter_map(|line| parse_threadtime(line.as_ref()))
+            .collect();
+        Self::from_parsed_lines(&parsed, opts)
+    }
+
+    fn from_parsed_lines(lines: &[LogLine], opts: SnapshotOpts) -> Self {
         let indexed: Vec<IndexedLogLine> = lines
             .iter()
             .enumerate()
-            .filter(|(_, l)| !opts.errors_only || l.is_error_level())
+            .filter(|(_, l)| opts.allows_level(l.level))
             .map(|(i, l)| IndexedLogLine::from((i, l)))
             .collect();
 
         let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
-        Self::from_events(&events, opts)
-    }
+        let kept: Vec<GroupedEvent> = events
+            .iter()
+            .filter(|event| opts.allows_event(event))
+            .cloned()
+            .collect();
 
-    /// Fingerprint and consolidate grouped events into a Chat Completions snapshot.
-    ///
-    /// Events should already carry redacted [`GroupedEvent::samples`] (as produced by
-    /// [`GroupedEventList::group_from_indexed_log_lines`]). Identical bugs collapse by
-    /// fingerprint; the result is pinned/trimmed to the cluster and JSON budgets.
-    pub fn from_events(events: &GroupedEventList, opts: SnapshotOpts) -> Self {
-        let mut clusters = absorb(events.as_slice());
+        let mut clusters = absorb(&kept);
         retain_clusters(&mut clusters, opts.max_clusters);
         trim_to_json_budget(&mut clusters);
 
+        let levels = opts.level_labels();
         Self {
             device_label: opts.device_label,
             device_model: opts.device_model,
-            levels: if opts.errors_only {
-                vec!["E", "F"]
-            } else {
-                vec!["V", "D", "I", "W", "E", "F"]
-            },
+            levels,
             clusters,
         }
+    }
+
+    /// True when no clusters remain (nothing to send to the model).
+    pub fn is_empty(&self) -> bool {
+        self.clusters.is_empty()
     }
 
     /// Pretty-printed JSON suitable as a Chat Completions user message.
@@ -229,42 +283,32 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse::parse_threadtime;
 
-    fn line(level: char, tag: &str, message: &str) -> LogLine {
-        LogLine {
-            timestamp: "09-17 12:00:00.000".into(),
-            pid: 1,
-            tid: 1,
-            level,
-            tag: tag.into(),
-            message: message.into(),
-        }
+    fn raw(level: char, tag: &str, message: &str) -> String {
+        format!("09-17 12:00:00.000     1     1 {level} {tag}: {message}")
     }
 
-    fn line_pid(pid: u32, level: char, tag: &str, message: &str) -> LogLine {
-        LogLine {
-            pid,
-            ..line(level, tag, message)
-        }
+    fn raw_pid(pid: u32, level: char, tag: &str, message: &str) -> String {
+        format!("09-17 12:00:00.000  {pid:>5}  {pid:>5} {level} {tag}: {message}")
     }
 
     #[test]
     fn empty_snapshot() {
-        let snap = Snapshot::from_lines(&[], SnapshotOpts::default());
-        assert!(snap.clusters.is_empty());
+        let snap = Snapshot::from_logcat_lines(std::iter::empty::<&str>(), SnapshotOpts::default());
+        assert!(snap.is_empty());
         assert_eq!(snap.levels, ["E", "F"]);
     }
 
     #[test]
     fn clusters_same_fingerprint() {
         let lines = [
-            line('E', "OkHttp", "failed host 1"),
-            line('E', "OkHttp", "failed host 2"),
-            line('E', "OkHttp", "failed host 3"),
-            line('E', "System", "disk full"),
+            raw('E', "OkHttp", "failed host 1"),
+            raw('E', "OkHttp", "failed host 2"),
+            raw('E', "OkHttp", "failed host 3"),
+            raw('E', "System", "disk full"),
         ];
-        let snap = Snapshot::from_lines(&lines, SnapshotOpts::default());
+        let snap =
+            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
         assert_eq!(snap.clusters.len(), 2);
         assert_eq!(snap.clusters[0].tag, "OkHttp");
         assert_eq!(snap.clusters[0].count, 3);
@@ -273,55 +317,108 @@ mod tests {
     }
 
     #[test]
-    fn ignores_info_when_errors_only() {
+    fn default_levels_drop_info() {
         let lines = [
-            line('I', "OkHttp", "ok"),
-            line('F', "AndroidRuntime", "FATAL EXCEPTION"),
+            raw('I', "OkHttp", "ok"),
+            raw('F', "AndroidRuntime", "FATAL EXCEPTION"),
         ];
-        let snap = Snapshot::from_lines(&lines, SnapshotOpts::default());
+        let snap =
+            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
         assert_eq!(snap.clusters.len(), 1);
         assert_eq!(snap.clusters[0].tag, "AndroidRuntime");
     }
 
     #[test]
     fn samples_are_redacted() {
-        let lines = [line(
+        let lines = [raw(
             'E',
             "AndroidRuntime",
             "token Bearer secret.jwt password=s3cret",
         )];
-        let snap = Snapshot::from_lines(&lines, SnapshotOpts::default());
+        let snap =
+            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
         assert!(!snap.clusters[0].samples[0].contains("secret.jwt"));
         assert!(!snap.clusters[0].samples[0].contains("s3cret"));
     }
 
     #[test]
+    fn content_type_filter_keeps_anr_only() {
+        let lines = [
+            raw('E', "OkHttp", "failed host"),
+            raw(
+                'E',
+                "ActivityManager",
+                "ANR in com.example.app (com.example.app/.Main)",
+            ),
+        ];
+        let opts = SnapshotOpts::builder()
+            .content_types([ContentType::Anr])
+            .build();
+        let snap = Snapshot::from_logcat_lines(lines.iter().map(String::as_str), opts);
+        assert_eq!(snap.clusters.len(), 1);
+        assert_eq!(snap.clusters[0].tag, "ActivityManager");
+    }
+
+    #[test]
+    fn tag_and_contains_filters() {
+        let lines = [
+            raw('E', "OkHttp", "NullPointerException at foo"),
+            raw('E', "System", "NullPointerException at bar"),
+            raw('E', "OkHttp", "timeout"),
+        ];
+        let opts = SnapshotOpts::builder()
+            .tags(["OkHttp"])
+            .contains("NullPointer")
+            .build();
+        let snap = Snapshot::from_logcat_lines(lines.iter().map(String::as_str), opts);
+        assert_eq!(snap.clusters.len(), 1);
+        assert!(snap.clusters[0].samples[0].contains("NullPointer"));
+    }
+
+    #[test]
+    fn optional_device_fields_default_empty() {
+        let opts = SnapshotOpts::builder().build();
+        assert!(opts.device_label.is_empty());
+        assert!(opts.device_model.is_empty());
+        let snap = Snapshot::from_logcat_lines(
+            [raw('E', "OkHttp", "boom")].iter().map(String::as_str),
+            opts,
+        );
+        assert!(snap.device_label.is_empty());
+        assert!(snap.device_model.is_empty());
+    }
+
+    #[test]
     fn digest_key_stable_for_same_count_bucket() {
         let a = [
-            line('E', "OkHttp", "failed host 1"),
-            line('E', "OkHttp", "failed host 2"),
-            line('E', "OkHttp", "failed host 3"),
+            raw('E', "OkHttp", "failed host 1"),
+            raw('E', "OkHttp", "failed host 2"),
+            raw('E', "OkHttp", "failed host 3"),
         ];
         let b = [
-            line('E', "OkHttp", "failed host 1"),
-            line('E', "OkHttp", "failed host 2"),
-            line('E', "OkHttp", "failed host 3"),
-            line('E', "OkHttp", "failed host 4"),
+            raw('E', "OkHttp", "failed host 1"),
+            raw('E', "OkHttp", "failed host 2"),
+            raw('E', "OkHttp", "failed host 3"),
+            raw('E', "OkHttp", "failed host 4"),
         ];
-        let snap_a = Snapshot::from_lines(&a, SnapshotOpts::default());
-        let snap_b = Snapshot::from_lines(&b, SnapshotOpts::default());
+        let snap_a =
+            Snapshot::from_logcat_lines(a.iter().map(String::as_str), SnapshotOpts::default());
+        let snap_b =
+            Snapshot::from_logcat_lines(b.iter().map(String::as_str), SnapshotOpts::default());
         assert_eq!(snap_a.digest_key(), snap_b.digest_key());
     }
 
     #[test]
     fn digest_key_changes_for_new_fingerprint() {
-        let a = [line('E', "OkHttp", "failed host")];
+        let a = [raw('E', "OkHttp", "failed host")];
         let b = [
-            line('E', "OkHttp", "failed host"),
-            line('F', "AndroidRuntime", "FATAL EXCEPTION"),
+            raw('E', "OkHttp", "failed host"),
+            raw('F', "AndroidRuntime", "FATAL EXCEPTION"),
         ];
-        let snap_a = Snapshot::from_lines(&a, SnapshotOpts::default());
-        let snap_b = Snapshot::from_lines(&b, SnapshotOpts::default());
+        let snap_a =
+            Snapshot::from_logcat_lines(a.iter().map(String::as_str), SnapshotOpts::default());
+        let snap_b =
+            Snapshot::from_logcat_lines(b.iter().map(String::as_str), SnapshotOpts::default());
         assert_ne!(snap_a.digest_key(), snap_b.digest_key());
         assert!(snap_b.has_new_high_severity(&snap_a.digest_key()));
     }
@@ -331,57 +428,54 @@ mod tests {
         let mut lines = Vec::new();
         for i in 0..8 {
             for _ in 0..3 {
-                lines.push(line('E', "OkHttp", &format!("failed host {i}")));
+                lines.push(raw('E', "OkHttp", &format!("failed host {i}")));
             }
         }
         let pid = 3178;
-        lines.push(line_pid(
-            pid,
-            'E',
-            "AndroidRuntime",
-            "FATAL EXCEPTION: main",
-        ));
-        lines.push(line_pid(
+        lines.push(raw_pid(pid, 'E', "AndroidRuntime", "FATAL EXCEPTION: main"));
+        lines.push(raw_pid(
             pid,
             'E',
             "AndroidRuntime",
             "Process: com.android.settings, PID: 3178",
         ));
-        lines.push(line_pid(
+        lines.push(raw_pid(
             pid,
             'E',
             "AndroidRuntime",
             "at android.app.ActivityThread.main(ActivityThread.java:1)",
         ));
-        let snap = Snapshot::from_lines(&lines, SnapshotOpts::default());
+        let snap =
+            Snapshot::from_logcat_lines(lines.iter().map(String::as_str), SnapshotOpts::default());
         let runtime = snap
             .clusters
             .iter()
             .filter(|c| c.tag == "AndroidRuntime")
             .count();
-        assert_eq!(runtime, 1, "stack should fold to one cluster");
+        assert_eq!(runtime, 1, "stack should group to one cluster");
         assert!(snap.clusters.iter().any(|c| c.tag == "OkHttp"));
         assert!(snap.clusters.len() <= 8);
     }
 
     #[test]
     fn parse_then_build_roundtrip() {
-        let raw = "09-17 12:01:04.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo";
-        let parsed = parse_threadtime(raw).unwrap();
-        let snap = Snapshot::from_lines(&[parsed], SnapshotOpts::default());
+        let raw_line = "09-17 12:01:04.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo";
+        let snap = Snapshot::from_logcat_lines([raw_line], SnapshotOpts::default());
         assert_eq!(snap.clusters.len(), 1);
         assert_eq!(snap.clusters[0].tag, "OkHttp");
     }
 
     #[test]
-    fn builder_requires_label_and_model() {
+    fn builder_sets_optional_device_and_filters() {
         let opts = SnapshotOpts::builder()
-            .label(("Pixel 8", "emulator-5554"))
-            .model("Pixel 8")
+            .device_label(("Pixel 8", "emulator-5554"))
+            .device_model("Pixel 8")
+            .content_types([ContentType::Crash])
+            .levels([LogLevel::Error, LogLevel::Fatal])
             .build();
         assert!(opts.device_label.starts_with("Pixel_8:"));
         assert_eq!(opts.device_model.as_ref(), "Pixel 8");
-        assert!(opts.errors_only);
+        assert_eq!(opts.content_types, [ContentType::Crash]);
         assert_eq!(opts.max_clusters, 8);
     }
 }

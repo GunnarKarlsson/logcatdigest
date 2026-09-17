@@ -2,41 +2,34 @@
 //!
 //! Crate name: `logcatdigest`. Repository: `logcatdigest`.
 //!
-//! Pipeline: parse threadtime → filter errors → group stacks (redact samples) →
-//! fingerprint and cluster identical bugs → JSON snapshot for
-//! `messages[].content`. This crate does not spawn adb or call any HTTP API —
-//! you own I/O and the system prompt.
-//!
-//! See `examples/pipeline.rs` for the composed path.
+//! Filter raw logcat lines into a JSON snapshot for `messages[].content`.
+//! This crate does not spawn adb or call any HTTP API — you own I/O and the
+//! system prompt.
 //!
 //! # Example
 //!
 //! ```
-//! use logcatdigest::{
-//!     parse_threadtime, GroupedEventList, IndexedLogLine, Snapshot, SnapshotOpts,
-//! };
+//! use logcatdigest::{ContentType, LogLevel, Snapshot, SnapshotOpts};
 //!
-//! let raw = "09-17 12:01:03.120  2144  2144 E OkHttp: failed 3 times token=sk-secret";
+//! let raw = "09-17 12:01:03.120  2144  2144 E AndroidRuntime: FATAL EXCEPTION: main";
 //! let opts = SnapshotOpts::builder()
-//!     .label(("Pixel 8", "emulator-5554"))
-//!     .model("Pixel 8")
+//!     .device_label(("Pixel 8", "emulator-5554"))
+//!     .device_model("Pixel 8")
+//!     .content_types([ContentType::Fatal, ContentType::Anr, ContentType::Crash])
+//!     .levels([LogLevel::Error, LogLevel::Fatal])
+//!     .tags(["AndroidRuntime"])
+//!     .contains("Exception")
+//!     .max_clusters(8)
 //!     .build();
-//! let lines: Vec<_> = [raw].into_iter().filter_map(parse_threadtime).collect();
-//! let indexed: Vec<_> = lines
-//!     .iter()
-//!     .enumerate()
-//!     .filter(|(_, l)| l.is_error_level())
-//!     .map(|(i, l)| IndexedLogLine::from((i, l)))
-//!     .collect();
-//! let events = GroupedEventList::group_from_indexed_log_lines(&indexed);
-//! let snap = Snapshot::from_events(&events, opts);
-//! assert!(!snap.clusters.is_empty());
+//! let snap = Snapshot::from_logcat_lines([raw], opts);
+//! assert!(!snap.is_empty());
 //! let _ = snap.to_pretty_json();
 //! ```
 
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms, missing_debug_implementations)]
 
+mod content;
 mod event;
 mod fingerprint;
 mod parse;
@@ -44,8 +37,6 @@ mod reduce;
 mod severity;
 mod snapshot;
 
-pub use event::{is_stack_head_message, GroupedEvent, GroupedEventList, IndexedLogLine};
-pub use fingerprint::{fingerprint, generate_fingerprint, redact, DeviceLabel, DeviceModel};
-pub use parse::{parse_threadtime, LogLine};
-pub use severity::is_high_severity;
+pub use content::{ContentType, LogLevel};
+pub use fingerprint::{DeviceLabel, DeviceModel};
 pub use snapshot::{Cluster, Snapshot, SnapshotOpts, SnapshotOptsBuilder};
