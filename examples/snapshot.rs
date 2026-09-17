@@ -1,4 +1,4 @@
-use logcatdigest::{digest_threadtime, generate_device_label, SnapshotOpts};
+use logcatdigest::{build_snapshot, generate_device_label, parse_threadtime, SnapshotOpts};
 
 fn main() {
     let raw = r#"
@@ -8,8 +8,9 @@ fn main() {
 09-17 12:01:04.001  2144  2201 E OkHttp: failed 3 times at /data/app/foo token=sk-secret
 "#;
 
-    let snap = digest_threadtime(
-        raw.lines(),
+    let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
+    let snap = build_snapshot(
+        &lines,
         SnapshotOpts {
             device_label: generate_device_label("Pixel 8", "emulator-5554"),
             device_model: "Pixel 8".into(),

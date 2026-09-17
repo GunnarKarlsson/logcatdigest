@@ -8,8 +8,7 @@ use crate::reduce::{absorb, retain_clusters, trim_to_json_budget};
 
 const DIGEST_COUNT_BUCKET: u32 = 5;
 
-/// Options for [`build_snapshot`] / [`build_snapshot_from_events`] /
-/// [`crate::digest_threadtime`].
+/// Options for [`build_snapshot`] / [`build_snapshot_from_events`].
 #[derive(Debug, Clone)]
 pub struct SnapshotOpts {
     /// Non-reversible device id from [`crate::generate_device_label`].

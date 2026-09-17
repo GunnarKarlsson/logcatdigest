@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- README and `examples/pipeline` show the composed digest path end-to-end
-  instead of demoing stages that were discarded before `digest_threadtime`.
+- README and `examples/pipeline` show the composed digest path end-to-end.
+- Removed `digest_threadtime`; use parse + `build_snapshot` or fold +
+  `build_snapshot_from_events` instead.
 
 ## [0.1.0] - 2026-09-17
 

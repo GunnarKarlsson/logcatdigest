@@ -78,7 +78,10 @@ fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
 
     // 3. Fold fatal/ANR stacks; sample lines are redacted here
     let events = fold_lines_to_events(&insight);
-    println!("fold:   {} events (stacks collapsed; samples redacted)", events.len());
+    println!(
+        "fold:   {} events (stacks collapsed; samples redacted)",
+        events.len()
+    );
     for ev in &events {
         let sample = ev.samples.first().map(String::as_str).unwrap_or("");
         println!(

@@ -7,8 +7,7 @@
 //! `messages[].content`. This crate does not spawn adb or call any HTTP API —
 //! you own I/O and the system prompt.
 //!
-//! See `examples/pipeline.rs` for the composed path and `examples/snapshot.rs`
-//! for the one-liner [`digest_threadtime`].
+//! See `examples/pipeline.rs` for the composed path.
 //!
 //! # Example
 //!
@@ -51,19 +50,4 @@ pub use event::{fold_lines_to_events, is_stack_head_message, InsightEvent, Insig
 pub use fingerprint::{fingerprint, generate_device_label, generate_fingerprint, redact};
 pub use parse::{parse_threadtime, LogLine};
 pub use severity::is_high_severity;
-pub use snapshot::{
-    build_snapshot, build_snapshot_from_events, Cluster, Snapshot, SnapshotOpts,
-};
-
-/// Parse threadtime lines and build an LLM-ready snapshot.
-///
-/// Convenience wrapper around parse → [`build_snapshot`]. Prefer composing
-/// [`fold_lines_to_events`] + [`build_snapshot_from_events`] when you want the
-/// stages visible in one place (see `examples/pipeline.rs`).
-pub fn digest_threadtime<'a>(
-    lines: impl IntoIterator<Item = &'a str>,
-    opts: SnapshotOpts,
-) -> Snapshot {
-    let parsed: Vec<LogLine> = lines.into_iter().filter_map(parse_threadtime).collect();
-    build_snapshot(&parsed, opts)
-}
+pub use snapshot::{build_snapshot, build_snapshot_from_events, Cluster, Snapshot, SnapshotOpts};

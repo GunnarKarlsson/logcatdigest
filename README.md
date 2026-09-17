@@ -99,17 +99,11 @@ fn main() {
 }
 ```
 
-Prefer the one-liner when you do not need the stages in scope:
-
-```rust
-let snap = digest_threadtime(raw.lines(), opts);
-```
-
 Runnable examples:
 
 ```text
 cargo run --example pipeline   # fixtures → composed parse/fold/snapshot path
-cargo run --example snapshot   # small inline log → digest_threadtime one-liner
+cargo run --example snapshot   # small inline log → parse + build_snapshot
 ```
 
 ## What it does
@@ -131,8 +125,8 @@ benign IDs. Do not claim PII-safe output.
 |---|---|
 | `parse_threadtime` / `LogLine` | Parse one threadtime line |
 | `fold_lines_to_events` | Fold stacks; redact samples onto events |
+| `build_snapshot` | Parsed `LogLine`s → `Snapshot` |
 | `build_snapshot_from_events` | Fingerprint + cluster events → `Snapshot` |
-| `build_snapshot` / `digest_threadtime` | Lines → `Snapshot` (same pipeline, fewer steps) |
 | `generate_device_label` | `{model}:{sha256(serial)[..8]}` |
 | `Snapshot::to_pretty_json` / `digest_key` | LLM payload + change detection |
 | `redact` / `fingerprint` | Also available for custom pipelines |

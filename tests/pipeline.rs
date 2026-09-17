@@ -4,7 +4,7 @@
 //! Shared logcat fixtures: `fixtures/*.threadtime`.
 
 use logcatdigest::{
-    digest_threadtime, fold_lines_to_events, generate_device_label, is_high_severity,
+    build_snapshot, fold_lines_to_events, generate_device_label, is_high_severity,
     parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
 };
 
@@ -17,7 +17,8 @@ fn opts() -> SnapshotOpts {
 }
 
 fn digest(raw: &str) -> Snapshot {
-    digest_threadtime(raw.lines(), opts())
+    let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
+    build_snapshot(&lines, opts())
 }
 
 fn fold_error_events(raw: &str) -> Vec<logcatdigest::InsightEvent> {
