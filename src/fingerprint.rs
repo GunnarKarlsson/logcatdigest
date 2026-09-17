@@ -1,7 +1,10 @@
 //! Noise-stable fingerprints and best-effort secret redaction.
 
 use regex::Regex;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::fmt;
+use std::ops::Deref;
 use std::sync::LazyLock;
 
 /// Noise that changes between copies of the same bug (hex, paths, numbers).
@@ -35,16 +38,93 @@ static SECRET_RE: LazyLock<Regex> = LazyLock::new(|| {
 const DEVICE_LABEL_HASH_LEN: usize = 8;
 const FINGERPRINT_HEX_LEN: usize = 16;
 
-/// Stable, non-reversible device label: `{sanitized_model}:{sha256(serial)[..8]}`.
-pub fn generate_device_label(model: &str, serial: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(serial.as_bytes());
-    let hex = format!("{:x}", hasher.finalize());
-    let model: String = model
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
-    format!("{model}:{}", &hex[..DEVICE_LABEL_HASH_LEN])
+/// Non-reversible device id: `{sanitized_model}:{sha256(serial)[..8]}`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct DeviceLabel(String);
+
+impl DeviceLabel {
+    /// Build a stable, non-reversible label from model name and device serial.
+    pub fn new(model: &str, serial: &str) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(serial.as_bytes());
+        let hex = format!("{:x}", hasher.finalize());
+        let model: String = model
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        Self(format!("{model}:{}", &hex[..DEVICE_LABEL_HASH_LEN]))
+    }
+}
+
+impl From<(&str, &str)> for DeviceLabel {
+    fn from((model, serial): (&str, &str)) -> Self {
+        Self::new(model, serial)
+    }
+}
+
+impl Deref for DeviceLabel {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Display for DeviceLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self)
+    }
+}
+
+impl AsRef<str> for DeviceLabel {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
+
+/// Human-readable Android device model (e.g. `Pixel 8`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct DeviceModel(String);
+
+impl DeviceModel {
+    /// Wrap a human-readable model string.
+    pub fn new(model: impl Into<String>) -> Self {
+        Self(model.into())
+    }
+}
+
+impl Deref for DeviceModel {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Display for DeviceModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self)
+    }
+}
+
+impl AsRef<str> for DeviceModel {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
+
+impl From<&str> for DeviceModel {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<String> for DeviceModel {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
 }
 
 /// Hex fingerprint of length 16 from tag + noise-stripped message.
@@ -135,11 +215,11 @@ mod tests {
     }
 
     #[test]
-    fn generate_device_label_hides_serial() {
-        let label = generate_device_label("Pixel 8", "emulator-5554");
+    fn device_label_hides_serial() {
+        let label = DeviceLabel::new("Pixel 8", "emulator-5554");
         assert!(label.starts_with("Pixel_8:"));
         assert!(!label.contains("emulator-5554"));
-        assert_eq!(label, generate_device_label("Pixel 8", "emulator-5554"));
-        assert_ne!(label, generate_device_label("Pixel 8", "emulator-5556"));
+        assert_eq!(label, DeviceLabel::new("Pixel 8", "emulator-5554"));
+        assert_ne!(label, DeviceLabel::new("Pixel 8", "emulator-5556"));
     }
 }

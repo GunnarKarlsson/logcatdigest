@@ -8,16 +8,14 @@
 //! ```
 
 use logcatdigest::{
-    build_snapshot_from_events, fold_lines_to_events, generate_device_label, parse_threadtime,
-    InsightLine, LogLine, Snapshot, SnapshotOpts,
+    fold_lines_to_events, parse_threadtime, InsightLine, LogLine, Snapshot, SnapshotOpts,
 };
 
 fn main() {
-    let opts = SnapshotOpts {
-        device_label: generate_device_label("Pixel 8", "emulator-5554"),
-        device_model: "Pixel 8".into(),
-        ..SnapshotOpts::default()
-    };
+    let opts = SnapshotOpts::builder()
+        .label(("Pixel 8", "emulator-5554"))
+        .model("Pixel 8")
+        .build();
 
     let scenarios = [
         (
@@ -94,7 +92,7 @@ fn run_pipeline(raw: &str, opts: SnapshotOpts) -> Snapshot {
     }
 
     // 4. Fingerprint identical bugs and consolidate into a budgeted snapshot
-    let snap = build_snapshot_from_events(&events, opts);
+    let snap = Snapshot::from_events(&events, opts);
     println!(
         "snap:   {} cluster(s) digest_key={:?}",
         snap.clusters.len(),

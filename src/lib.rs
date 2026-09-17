@@ -13,16 +13,14 @@
 //!
 //! ```
 //! use logcatdigest::{
-//!     build_snapshot_from_events, fold_lines_to_events, generate_device_label,
-//!     parse_threadtime, InsightLine, SnapshotOpts,
+//!     fold_lines_to_events, parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
 //! };
 //!
 //! let raw = "09-17 12:01:03.120  2144  2144 E OkHttp: failed 3 times token=sk-secret";
-//! let opts = SnapshotOpts {
-//!     device_label: generate_device_label("Pixel 8", "emulator-5554"),
-//!     device_model: "Pixel 8".into(),
-//!     ..SnapshotOpts::default()
-//! };
+//! let opts = SnapshotOpts::builder()
+//!     .label(("Pixel 8", "emulator-5554"))
+//!     .model("Pixel 8")
+//!     .build();
 //! let lines: Vec<_> = [raw].into_iter().filter_map(parse_threadtime).collect();
 //! let insight: Vec<_> = lines
 //!     .iter()
@@ -31,7 +29,7 @@
 //!     .map(|(i, l)| InsightLine::from((i, l)))
 //!     .collect();
 //! let events = fold_lines_to_events(&insight);
-//! let snap = build_snapshot_from_events(&events, opts);
+//! let snap = Snapshot::from_events(&events, opts);
 //! assert!(!snap.clusters.is_empty());
 //! let _ = snap.to_pretty_json();
 //! ```
@@ -47,7 +45,7 @@ mod severity;
 mod snapshot;
 
 pub use event::{fold_lines_to_events, is_stack_head_message, InsightEvent, InsightLine};
-pub use fingerprint::{fingerprint, generate_device_label, generate_fingerprint, redact};
+pub use fingerprint::{fingerprint, generate_fingerprint, redact, DeviceLabel, DeviceModel};
 pub use parse::{parse_threadtime, LogLine};
 pub use severity::is_high_severity;
-pub use snapshot::{build_snapshot, build_snapshot_from_events, Cluster, Snapshot, SnapshotOpts};
+pub use snapshot::{Cluster, Snapshot, SnapshotOpts, SnapshotOptsBuilder};

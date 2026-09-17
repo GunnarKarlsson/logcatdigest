@@ -51,8 +51,7 @@ One path: parse → filter → fold (redact) → fingerprint/cluster → gate th
 
 ```rust
 use logcatdigest::{
-    build_snapshot_from_events, fold_lines_to_events, generate_device_label,
-    parse_threadtime, InsightLine, SnapshotOpts,
+    fold_lines_to_events, parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
 };
 
 fn main() {
@@ -64,11 +63,10 @@ fn main() {
 09-17 12:01:04.050  2144  2201 E OkHttp: failed 9 times at /data/app/bar
 "#;
 
-    let opts = SnapshotOpts {
-        device_label: generate_device_label("Pixel 8", "emulator-5554"),
-        device_model: "Pixel 8".into(),
-        ..SnapshotOpts::default() // errors_only, max_clusters = 8
-    };
+    let opts = SnapshotOpts::builder()
+        .label(("Pixel 8", "emulator-5554"))
+        .model("Pixel 8")
+        .build();
 
     // 1. Parse threadtime logcat
     let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
@@ -83,7 +81,7 @@ fn main() {
     let events = fold_lines_to_events(&insight);
 
     // 3. Fingerprint + consolidate identical errors → Chat Completions snapshot
-    let snap = build_snapshot_from_events(&events, opts);
+    let snap = Snapshot::from_events(&events, opts);
     let json = snap.to_pretty_json();
     let key = snap.digest_key();
 
@@ -103,7 +101,7 @@ Runnable examples:
 
 ```text
 cargo run --example pipeline   # fixtures → composed parse/fold/snapshot path
-cargo run --example snapshot   # small inline log → parse + build_snapshot
+cargo run --example snapshot   # small inline log → Snapshot::from_lines
 ```
 
 ## What it does
@@ -125,9 +123,10 @@ benign IDs. Do not claim PII-safe output.
 |---|---|
 | `parse_threadtime` / `LogLine` | Parse one threadtime line |
 | `fold_lines_to_events` | Fold stacks; redact samples onto events |
-| `build_snapshot` | Parsed `LogLine`s → `Snapshot` |
-| `build_snapshot_from_events` | Fingerprint + cluster events → `Snapshot` |
-| `generate_device_label` | `{model}:{sha256(serial)[..8]}` |
+| `SnapshotOpts::builder` | Typestate builder for device label/model |
+| `Snapshot::from_lines` | Parsed `LogLine`s → `Snapshot` |
+| `Snapshot::from_events` | Fingerprint + cluster events → `Snapshot` |
+| `DeviceLabel` / `DeviceModel` | Typed device id and model on snapshots |
 | `Snapshot::to_pretty_json` / `digest_key` | LLM payload + change detection |
 | `redact` / `fingerprint` | Also available for custom pipelines |
 

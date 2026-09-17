@@ -1,16 +1,15 @@
-use logcatdigest::{build_snapshot, generate_device_label, parse_threadtime, SnapshotOpts};
+use logcatdigest::{parse_threadtime, Snapshot, SnapshotOpts};
 
 #[test]
 fn fixture_crash_anr_snapshot() {
     let raw = include_str!("../fixtures/crash_anr.threadtime");
     let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    let snap = build_snapshot(
+    let snap = Snapshot::from_lines(
         &lines,
-        SnapshotOpts {
-            device_label: generate_device_label("Pixel 8", "emulator-5554"),
-            device_model: "Pixel 8".into(),
-            ..SnapshotOpts::default()
-        },
+        SnapshotOpts::builder()
+            .label(("Pixel 8", "emulator-5554"))
+            .model("Pixel 8")
+            .build(),
     );
 
     assert!(

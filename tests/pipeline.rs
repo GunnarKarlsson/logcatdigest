@@ -4,21 +4,19 @@
 //! Shared logcat fixtures: `fixtures/*.threadtime`.
 
 use logcatdigest::{
-    build_snapshot, fold_lines_to_events, generate_device_label, is_high_severity,
-    parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
+    fold_lines_to_events, is_high_severity, parse_threadtime, InsightLine, Snapshot, SnapshotOpts,
 };
 
 fn opts() -> SnapshotOpts {
-    SnapshotOpts {
-        device_label: generate_device_label("Pixel 8", "emulator-5554"),
-        device_model: "Pixel 8".into(),
-        ..SnapshotOpts::default()
-    }
+    SnapshotOpts::builder()
+        .label(("Pixel 8", "emulator-5554"))
+        .model("Pixel 8")
+        .build()
 }
 
 fn digest(raw: &str) -> Snapshot {
     let lines: Vec<_> = raw.lines().filter_map(parse_threadtime).collect();
-    build_snapshot(&lines, opts())
+    Snapshot::from_lines(&lines, opts())
 }
 
 fn fold_error_events(raw: &str) -> Vec<logcatdigest::InsightEvent> {
