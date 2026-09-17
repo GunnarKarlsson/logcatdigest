@@ -1,7 +1,7 @@
-# logcat-digest
+# logcatdigest
 
-[![Crates.io](https://img.shields.io/crates/v/logcat-digest.svg)](https://crates.io/crates/logcat-digest)
-[![Docs.rs](https://docs.rs/logcat-digest/badge.svg)](https://docs.rs/logcat-digest)
+[![Crates.io](https://img.shields.io/crates/v/logcatdigest.svg)](https://crates.io/crates/logcatdigest)
+[![Docs.rs](https://docs.rs/logcatdigest/badge.svg)](https://docs.rs/logcatdigest)
 [![MSRV](https://img.shields.io/badge/MSRV-1.80+-blue.svg)](https://blog.rust-lang.org/2024/07/25/Rust-1.80.0/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -19,18 +19,18 @@ No adb child process. No HTTP client. You own I/O and the system prompt.
 ## Install
 
 ```bash
-cargo add logcat-digest
+cargo add logcatdigest
 ```
 
 ```toml
 [dependencies]
-logcat-digest = "0.1"
+logcatdigest = "0.1"
 ```
 
 ## Quick start
 
 ```rust
-use logcat_digest::{digest_threadtime, generate_device_label, SnapshotOpts};
+use logcatdigest::{digest_threadtime, generate_device_label, SnapshotOpts};
 
 fn main() {
     let raw = r#"

@@ -1,4 +1,4 @@
-use logcat_digest::{digest_threadtime, generate_device_label, SnapshotOpts};
+use logcatdigest::{digest_threadtime, generate_device_label, SnapshotOpts};
 
 #[test]
 fn fixture_crash_anr_snapshot() {

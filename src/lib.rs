@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! use logcat_digest::{digest_threadtime, generate_device_label, SnapshotOpts};
+//! use logcatdigest::{digest_threadtime, generate_device_label, SnapshotOpts};
 //!
 //! let raw = "09-17 12:01:03.120  2144  2144 E OkHttp: failed 3 times token=sk-secret";
 //! let snap = digest_threadtime(
